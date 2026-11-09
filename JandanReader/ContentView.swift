@@ -107,6 +107,11 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
+            // 纯净模式隐藏了站点导航，用户中心必须有稳定的原生入口。
+            Button { ui.accountURL = URL(string: "https://jandan.net/new/member") } label: {
+                IconButton(systemName: "person.crop.circle")
+            }
+            .buttonStyle(.plain)
             Button { ui.showHistory = true } label: {
                 IconButton(systemName: "clock.arrow.circlepath")
             }
