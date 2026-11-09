@@ -64,8 +64,13 @@ struct ContentView: View {
     /// 顺序反过来会让 body 先读到 nil，随后在 SwiftUI 视图更新事务内发布
     /// objectWillChange，iOS 26 上这次刷新会被丢弃，表现为「点了没反应」。
     private func selectChannel(_ channel: Channel) {
-        guard channel != ui.selected else { return }
         router.ensure(channel)
+        guard channel != ui.selected else {
+            // 再点当前频道：网页内登录、点进文章后 URL 会漂走，
+            // 用户点同一个标签期望回到该频道首页；重新加载会自动带上登录态 Cookie。
+            router.store(for: channel)?.loadChannel()
+            return
+        }
         ui.selected = channel
     }
 
