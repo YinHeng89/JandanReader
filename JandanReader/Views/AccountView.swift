@@ -13,7 +13,7 @@ struct AccountView: View {
     init(url: URL, darkMode: Bool, onOpenContent: @escaping (URL) -> Void) {
         self.darkMode = darkMode
         self.onOpenContent = onOpenContent
-        _store = StateObject(wrappedValue: AccountWebStore(url: url, darkMode: darkMode))
+        _store = StateObject(wrappedValue: AccountWebStore(url: url))
     }
 
     var body: some View {
@@ -51,7 +51,7 @@ struct AccountView: View {
                     .padding(32)
                 }
             }
-            .navigationTitle("用户中心")
+            .navigationTitle(store.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

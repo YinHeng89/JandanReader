@@ -41,7 +41,7 @@ enum PageScripts {
     }
     """
 
-    /// 独立功能页（用户中心 / 会员）专用：只去掉站点自身的导航、页脚、面包屑与广告。
+    /// 独立功能页（用户中心 / 会员 / 消息）专用：只去掉站点自身的导航、页脚、面包屑与广告。
     /// 用户中心是 JS 渲染的 SPA，不能套首页那套 .main 宽度、.post-* 排版覆盖，
     /// 否则会挤压登录表单等容器。
     static let accountCSS = """
@@ -62,19 +62,29 @@ enum PageScripts {
         return String(json.dropFirst().dropLast())
     }
 
-    /// 页面加载最开始注入：设置暗色标记 + 埋入可开关的样式节点。
-    /// `css` 允许独立页换一套清理规则，默认使用首页的 cleanCSS。
-    static func bootstrap(dark: Bool, clean: Bool, fontPercent: Int, css: String? = nil) -> String {
+    /// 页面加载最开始注入：埋入可开关的样式节点 + 常驻暗色同步器。
+    ///
+    /// 暗色的唯一真相源是 localStorage['darkMode']：
+    /// 旧实现把「创建 WebView 那一刻」的模式硬编码进 WKUserScript，之后切回浅色，
+    /// 每次导航（含手势返回恢复历史条目、bfcache）脚本仍会把旧值写回并加回
+    /// .dark-model，直到 didFinish 才被 setDark 修正 —— 表现为短暂闪深色。
+    /// 现在脚本只读不写，并用 MutationObserver 纠正页面生命周期内任意时刻的偏差。
+    static func bootstrap(clean: Bool, fontPercent: Int, css: String? = nil) -> String {
         let cssLiteral = jsLiteral(css ?? cleanCSS)
-        let setDark = dark ? "true" : "false"
         let disabled = clean ? "false" : "true"
         return """
         (function () {
-          try { localStorage.setItem('darkMode', '\(setDark)'); } catch (e) {}
-          try {
-            if (\(setDark)) { document.documentElement.classList.add('dark-model'); }
-            else { document.documentElement.classList.remove('dark-model'); }
-          } catch (e) {}
+          function jdSyncDark() {
+            try {
+              var h = document.documentElement;
+              if (!h) { return; }
+              var want = localStorage.getItem('darkMode') === 'true';
+              var has = h.classList.contains('dark-model');
+              if (want === has) { return; }
+              if (want) { h.classList.add('dark-model'); }
+              else { h.classList.remove('dark-model'); }
+            } catch (e) {}
+          }
           function jdBoot() {
             try {
               var s = document.getElementById('jd-app-style');
@@ -90,21 +100,59 @@ enum PageScripts {
               document.body.style.webkitTextSizeAdjust = '\(fontPercent)%';
             } catch (e) {}
           }
+          function jdWatch() {
+            try {
+              if (!document.documentElement) { return false; }
+              new MutationObserver(jdSyncDark).observe(document.documentElement,
+                { attributes: true, attributeFilter: ['class'] });
+            } catch (e) {}
+            return true;
+          }
+          jdSyncDark();
+          try { if (document.documentElement) { jdBoot(); } } catch (e) {}
           try {
-            if (document.documentElement) { jdBoot(); }
-            else { document.addEventListener('DOMContentLoaded', jdBoot); }
-          } catch (e) { document.addEventListener('DOMContentLoaded', jdBoot); }
+            document.addEventListener('DOMContentLoaded', function () {
+              jdSyncDark(); jdBoot();
+            });
+            window.addEventListener('storage', jdSyncDark);
+          } catch (e) {}
+          if (!jdWatch()) {
+            document.addEventListener('DOMContentLoaded', jdWatch);
+          }
         })();
         """
     }
 
+    /// 原生切换模式：写 localStorage 并立即同步当前 DOM。
+    /// 其它 WebView 由 router.applySettings() 逐个调用；同源 storage 事件与
+    /// MutationObserver 会处理跨页 / 站点脚本造成的偏差。
     static func setDark(_ enabled: Bool) -> String {
         """
         (function () {
           try {
             localStorage.setItem('darkMode', '\(enabled ? "true" : "false")');
-            if (\(enabled ? "true" : "false")) { document.documentElement.classList.add('dark-model'); }
-            else { document.documentElement.classList.remove('dark-model'); }
+            var h = document.documentElement;
+            if (h) {
+              if (\(enabled ? "true" : "false")) { h.classList.add('dark-model'); }
+              else { h.classList.remove('dark-model'); }
+            }
+          } catch (e) {}
+        })();
+        """
+    }
+
+    /// 只按 localStorage 重新同步一次，不改值。
+    /// 用于 didCommit / didFinish：手势返回恢复 bfcache 时 DOM 带着旧的
+    /// .dark-model，而 atDocumentStart 脚本不会重跑，需要在文档提交后立刻纠正。
+    static func syncDark() -> String {
+        """
+        (function () {
+          try {
+            var want = localStorage.getItem('darkMode') === 'true';
+            var h = document.documentElement;
+            if (!h) { return; }
+            if (want) { h.classList.add('dark-model'); }
+            else { h.classList.remove('dark-model'); }
           } catch (e) {}
         })();
         """

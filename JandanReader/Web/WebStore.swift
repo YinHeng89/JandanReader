@@ -34,7 +34,6 @@ final class WebStore: NSObject, ObservableObject {
         let controller = WKUserContentController()
         controller.addUserScript(WKUserScript(
             source: PageScripts.bootstrap(
-                dark: settings.darkMode,
                 clean: settings.cleanMode,
                 fontPercent: settings.fontSizePercent
             ),
@@ -139,6 +138,16 @@ extension WebStore: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
         errorMessage = nil
+        // 手势返回时 WKWebView 先展示历史条目快照/旧 DOM，这里先纠正一次，
+        // didCommit 再纠正一次，把旧模式可见的窗口压到最短。
+        evaluate(PageScripts.syncDark())
+        refreshNavigationState()
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // 手势返回恢复 bfcache 时不会重跑 atDocumentStart 脚本，
+        // 文档一提交就按 localStorage 纠正 .dark-model，避免闪一帧旧模式。
+        evaluate(PageScripts.syncDark())
         refreshNavigationState()
     }
 

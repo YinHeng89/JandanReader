@@ -10,7 +10,9 @@ struct SettingsView: View {
 
     private func open(_ path: String) {
         guard let url = URL(string: "https://jandan.net" + path) else { return }
-        onOpen(url)
+        // 统一走外壳的 URL 分发（WebRouter.open 会判定功能页 → 独立页）。
+        // 先 dismiss，等 sheet 完全消失再触发，避免与 fullScreenCover 抢 presentation。
+        ui.pendingURL = url
         dismiss()
     }
 
@@ -116,6 +118,11 @@ struct SettingsView: View {
                     Button("完成") { dismiss() }
                 }
             }
+        }
+        .onDisappear {
+            guard let url = ui.pendingURL else { return }
+            ui.pendingURL = nil
+            onOpen(url)
         }
     }
 }

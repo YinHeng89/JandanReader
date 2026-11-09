@@ -38,7 +38,14 @@ final class WebRouter: ObservableObject {
         stores.values.forEach { $0.applySettings() }
     }
 
+    /// 所有「从原生侧打开 URL」的入口（设置页、阅读历史、顶栏、功能页回传）
+    /// 统一走这里：功能页一律交给外壳独立呈现，不落回频道 WebView。
+    /// 判定只放这一处，避免各入口各写一套导致设置页这类后门漏掉。
     func open(_ url: URL, in channel: Channel) {
+        if AccountRoute.isAccount(url) {
+            accountHandler?(url)
+            return
+        }
         ensure(channel)
         stores[channel.id]?.load(url)
     }

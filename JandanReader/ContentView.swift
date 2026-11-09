@@ -66,7 +66,7 @@ struct ContentView: View {
             set: { shown in if !shown { ui.accountURL = nil } }
         )) {
             AccountView(
-                url: ui.accountURL ?? URL(string: "https://jandan.net/new/member")!,
+                url: ui.accountURL ?? AccountRoute.memberURL,
                 darkMode: settings.darkMode
             ) { target in
                 ui.accountURL = nil
@@ -108,7 +108,8 @@ struct ContentView: View {
             }
             Spacer(minLength: 8)
             // 纯净模式隐藏了站点导航，用户中心必须有稳定的原生入口。
-            Button { ui.accountURL = URL(string: "https://jandan.net/new/member") } label: {
+            // 与其它入口一样走 router.open，由 WebRouter 统一判定功能页。
+            Button { router.open(AccountRoute.memberURL, in: ui.selected) } label: {
                 IconButton(systemName: "person.crop.circle")
             }
             .buttonStyle(.plain)

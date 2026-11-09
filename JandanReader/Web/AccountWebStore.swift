@@ -11,16 +11,19 @@ final class AccountWebStore: NSObject, ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var canGoBack = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var title: String
 
     /// 用户中心里点到内容链接时，交给外壳关闭本页并回主频道打开。
     var onOpenContent: ((URL) -> Void)?
 
-    init(url: URL, darkMode: Bool) {
+    init(url: URL) {
+        self.title = AccountRoute.title(for: url)
+
         let controller = WKUserContentController()
         // 用独立页的精简清理规则：去掉站点导航/页脚/面包屑，保留 SPA 自身排版。
+        // 暗色不传值：脚本按 localStorage 同步，避免硬编码旧模式。
         controller.addUserScript(WKUserScript(
             source: PageScripts.bootstrap(
-                dark: darkMode,
                 clean: true,
                 fontPercent: 100,
                 css: PageScripts.accountCSS
@@ -75,8 +78,15 @@ extension AccountWebStore: WKNavigationDelegate {
         syncBackState()
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        webView.evaluateJavaScript(PageScripts.syncDark(), completionHandler: { _, _ in })
+        syncBackState()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
+        webView.evaluateJavaScript(PageScripts.syncDark(), completionHandler: { _, _ in })
+        if let url = webView.url { title = AccountRoute.title(for: url) }
         syncBackState()
     }
 

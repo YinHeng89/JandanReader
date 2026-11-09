@@ -17,4 +17,7 @@ final class ContentViewState: ObservableObject {
 final class SettingsViewState: ObservableObject {
     @Published var clearingCache = false
     @Published var cacheCleared = false
+    /// 点账户功能页时先记下目标，等 sheet 完全消失再交给外壳弹独立页，
+    /// 避免 dismiss 与 fullScreenCover 同时发生导致后者被吞。
+    @Published var pendingURL: URL?
 }
