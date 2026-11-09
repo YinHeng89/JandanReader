@@ -10,6 +10,8 @@ final class ContentViewState: ObservableObject {
     @Published var showHistory = false
     @Published var showShare = false
     @Published var didConfigure = false
+    /// 非 nil 时呈现用户中心独立页。
+    @Published var accountURL: URL?
 }
 
 final class SettingsViewState: ObservableObject {

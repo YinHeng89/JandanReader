@@ -20,7 +20,10 @@ final class WebStore: NSObject, ObservableObject {
     private weak var history: HistoryStore?
     private var observations: [NSKeyValueObservation] = []
 
+    /// 站外链接交给系统浏览器。
     var openExternally: ((URL) -> Void)?
+    /// 用户中心 / 会员 / 消息等功能页交给外壳独立呈现。
+    var openAccount: ((URL) -> Void)?
 
     init(channel: Channel, settings: AppSettings, history: HistoryStore) {
         self.channel = channel
@@ -183,6 +186,15 @@ extension WebStore: WKNavigationDelegate {
             return
         }
 
+        // 用户中心 / 会员 / 消息等功能页不属于任何内容频道，交给外壳独立呈现，
+        // 否则网页内容变了、频道条焦点还停在原频道。
+        if AccountRoute.isAccount(url),
+           navigationAction.navigationType == .linkActivated || navigationAction.targetFrame == nil {
+            decisionHandler(.cancel)
+            openAccount?(url)
+            return
+        }
+
         // target="_blank" 在 WKWebView 里默认无响应，改为当前页打开。
         if navigationAction.targetFrame == nil {
             decisionHandler(.cancel)
@@ -214,7 +226,6 @@ extension WebStore: WKNavigationDelegate {
             "googlesyndication.com",
             "google-analytics.com",
             "googletagmanager.com",
-            "googlesyndication.com",
             "adsrvr.org",
             "adnxs.com",
             "criteo.com",
@@ -233,7 +244,9 @@ extension WebStore: WKUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         if let url = navigationAction.request.url, !isAdHost(url.host ?? "") {
-            if url.host?.hasSuffix("jandan.net") == true {
+            if AccountRoute.isAccount(url) {
+                openAccount?(url)
+            } else if url.host?.hasSuffix("jandan.net") == true {
                 load(url)
             } else if navigationAction.navigationType == .linkActivated {
                 openExternally?(url)

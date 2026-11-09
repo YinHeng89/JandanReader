@@ -14,12 +14,15 @@
 		3A2A62383415019D3FE604B7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ADC0E5C6440318094FE4812 /* Assets.xcassets */; };
 		44A9433341D3093A58CA25D0 /* WebViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */; };
 		629F377A0D5F97763459457D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BC3B884B09EBA3D6190FDA /* ContentView.swift */; };
+		732B516E6DFEECE4447BD3E7 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BB54079F91623FF0E2588B /* AccountView.swift */; };
 		7BCF849A10BF86BDB05AA7D0 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7EDE95770203EDE96407F /* AppSettings.swift */; };
 		8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9544B75B0717D6E90982EA8D /* HistoryView.swift */; };
 		8F0EA5372A1E836F79F139E1 /* WebStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C109D1E890B16C618EBED6 /* WebStore.swift */; };
 		91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC214C1C9A26442324FFAFF /* Channel.swift */; };
 		9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10143E5578846E64131CD76C /* Components.swift */; };
 		AB2FA898B5F70534AA8B572A /* WebRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F71498310F29D5DD682B29 /* WebRouter.swift */; };
+		BBD67E8215EAB2BCF204F1F3 /* AccountWebStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F4B2EC9DC6ADB655E14FF0 /* AccountWebStore.swift */; };
+		CDA5B2FD4A4C2E6CA9903260 /* AccountRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C0CB1028ED1BDE769997A32 /* AccountRoute.swift */; };
 		D0675DF90D7AB06F8B947BF4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */; };
 		F4067C9646AA7080686E3820 /* ViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1B3C02D08CF5687F3AE318 /* ViewState.swift */; };
 /* End PBXBuildFile section */
@@ -29,6 +32,7 @@
 		0F1B3C02D08CF5687F3AE318 /* ViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewState.swift; sourceTree = "<group>"; };
 		10143E5578846E64131CD76C /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		29BC3B884B09EBA3D6190FDA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		38F4B2EC9DC6ADB655E14FF0 /* AccountWebStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountWebStore.swift; sourceTree = "<group>"; };
 		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewContainer.swift; sourceTree = "<group>"; };
@@ -37,8 +41,10 @@
 		8FC214C1C9A26442324FFAFF /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		9544B75B0717D6E90982EA8D /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		9ADC0E5C6440318094FE4812 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9C0CB1028ED1BDE769997A32 /* AccountRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountRoute.swift; sourceTree = "<group>"; };
 		AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		D4F71498310F29D5DD682B29 /* WebRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRouter.swift; sourceTree = "<group>"; };
+		E0BB54079F91623FF0E2588B /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		E8C109D1E890B16C618EBED6 /* WebStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebStore.swift; sourceTree = "<group>"; };
 		F36AF0CD3B7B023B14E04959 /* PageScripts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageScripts.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -47,6 +53,7 @@
 		9C89CA23DC6430CB393870F1 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E0BB54079F91623FF0E2588B /* AccountView.swift */,
 				0EEDE3EB317308FA0C668699 /* ActivityView.swift */,
 				10143E5578846E64131CD76C /* Components.swift */,
 				9544B75B0717D6E90982EA8D /* HistoryView.swift */,
@@ -66,6 +73,7 @@
 		C5296A1192F8E4796C2608C8 /* Web */ = {
 			isa = PBXGroup;
 			children = (
+				38F4B2EC9DC6ADB655E14FF0 /* AccountWebStore.swift */,
 				F36AF0CD3B7B023B14E04959 /* PageScripts.swift */,
 				D4F71498310F29D5DD682B29 /* WebRouter.swift */,
 				E8C109D1E890B16C618EBED6 /* WebStore.swift */,
@@ -98,6 +106,7 @@
 		F48C51B25E04FD5E201618F6 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				9C0CB1028ED1BDE769997A32 /* AccountRoute.swift */,
 				68A7EDE95770203EDE96407F /* AppSettings.swift */,
 				8FC214C1C9A26442324FFAFF /* Channel.swift */,
 				AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */,
@@ -176,6 +185,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDA5B2FD4A4C2E6CA9903260 /* AccountRoute.swift in Sources */,
+				732B516E6DFEECE4447BD3E7 /* AccountView.swift in Sources */,
+				BBD67E8215EAB2BCF204F1F3 /* AccountWebStore.swift in Sources */,
 				30D58ED5DAC1564B0861D7DF /* ActivityView.swift in Sources */,
 				7BCF849A10BF86BDB05AA7D0 /* AppSettings.swift in Sources */,
 				91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */,

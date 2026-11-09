@@ -9,17 +9,25 @@ final class WebRouter: ObservableObject {
     private var settings: AppSettings?
     private var history: HistoryStore?
     private var externalHandler: ((URL) -> Void)?
+    private var accountHandler: ((URL) -> Void)?
 
-    func configure(settings: AppSettings, history: HistoryStore, openExternally: @escaping (URL) -> Void) {
+    func configure(
+        settings: AppSettings,
+        history: HistoryStore,
+        openExternally: @escaping (URL) -> Void,
+        openAccount: @escaping (URL) -> Void
+    ) {
         self.settings = settings
         self.history = history
         self.externalHandler = openExternally
+        self.accountHandler = openAccount
     }
 
     func ensure(_ channel: Channel) {
         guard stores[channel.id] == nil, let settings, let history else { return }
         let store = WebStore(channel: channel, settings: settings, history: history)
         store.openExternally = externalHandler
+        store.openAccount = accountHandler
         stores[channel.id] = store
         objectWillChange.send()
     }

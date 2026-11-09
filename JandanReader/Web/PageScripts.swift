@@ -41,6 +41,20 @@ enum PageScripts {
     }
     """
 
+    /// 独立功能页（用户中心 / 会员）专用：只去掉站点自身的导航、页脚、面包屑与广告。
+    /// 用户中心是 JS 渲染的 SPA，不能套首页那套 .main 宽度、.post-* 排版覆盖，
+    /// 否则会挤压登录表单等容器。
+    static let accountCSS = """
+    #header, #nav, #footer, #float-window, #nav_top,
+    [id^="sidebar"], .sidebar, .sidebar-bbs,
+    .adsbygoogle, ins.adsbygoogle,
+    iframe[src*="googlesyndication"], iframe[src*="doubleclick"],
+    .header-h1, .breadcrumb, .model-btn, .header-model-btn { display: none !important; }
+
+    #main-warpper, .wrapper { padding-top: 0 !important; margin-top: 0 !important; }
+    body { padding-top: 0 !important; }
+    """
+
     private static func jsLiteral(_ text: String) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: [text]),
               let json = String(data: data, encoding: .utf8)
@@ -49,8 +63,9 @@ enum PageScripts {
     }
 
     /// 页面加载最开始注入：设置暗色标记 + 埋入可开关的样式节点。
-    static func bootstrap(dark: Bool, clean: Bool, fontPercent: Int) -> String {
-        let cssLiteral = jsLiteral(cleanCSS)
+    /// `css` 允许独立页换一套清理规则，默认使用首页的 cleanCSS。
+    static func bootstrap(dark: Bool, clean: Bool, fontPercent: Int, css: String? = nil) -> String {
+        let cssLiteral = jsLiteral(css ?? cleanCSS)
         let setDark = dark ? "true" : "false"
         let disabled = clean ? "false" : "true"
         return """

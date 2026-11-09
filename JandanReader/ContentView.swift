@@ -25,9 +25,12 @@ struct ContentView: View {
         .onAppear {
             guard !ui.didConfigure else { return }
             ui.didConfigure = true
-            router.configure(settings: settings, history: history) { url in
-                UIApplication.shared.open(url)
-            }
+            router.configure(
+                settings: settings,
+                history: history,
+                openExternally: { url in UIApplication.shared.open(url) },
+                openAccount: { url in ui.accountURL = url }
+            )
             let initial = Channel.withID(settings.lastChannelID)
             // 先建好 store 再改选中态，避免 body 先读到 nil。
             router.ensure(initial)
@@ -57,6 +60,24 @@ struct ContentView: View {
         .sheet(isPresented: $ui.showShare) {
             ActivityView(url: store?.shareURL ?? Channel.home.url)
                 .presentationDetents([.medium])
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { ui.accountURL != nil },
+            set: { shown in if !shown { ui.accountURL = nil } }
+        )) {
+            AccountView(
+                url: ui.accountURL ?? URL(string: "https://jandan.net/new/member")!,
+                darkMode: settings.darkMode
+            ) { target in
+                ui.accountURL = nil
+                // 点到的若是频道首页，直接切频道，保证焦点与内容一致。
+                if target.host?.hasSuffix("jandan.net") == true,
+                   let channel = Channel.all.first(where: { $0.path == target.path }) {
+                    selectChannel(channel)
+                } else {
+                    router.open(target, in: ui.selected)
+                }
+            }
         }
     }
 
