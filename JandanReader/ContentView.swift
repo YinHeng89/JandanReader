@@ -13,7 +13,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            ChannelBar(selected: $ui.selected)
+            ChannelBar(selected: ui.selected, onSelect: selectChannel)
             ProgressLine(progress: store?.progress ?? 0, isLoading: store?.isLoading ?? false)
 
             webContent
@@ -28,11 +28,14 @@ struct ContentView: View {
             router.configure(settings: settings, history: history) { url in
                 UIApplication.shared.open(url)
             }
-            ui.selected = Channel.withID(settings.lastChannelID)
-            router.ensure(ui.selected)
+            let initial = Channel.withID(settings.lastChannelID)
+            // 先建好 store 再改选中态，避免 body 先读到 nil。
+            router.ensure(initial)
+            ui.selected = initial
         }
         .onChange(of: ui.selected) { _, newValue in
             settings.lastChannelID = newValue.id
+            // 兜底：从历史/外部跳转恢复时确保 store 存在；常规点击已在 selectChannel 建好。
             router.ensure(newValue)
         }
         .onChange(of: settings.darkMode) { _, _ in router.applySettings() }
@@ -55,6 +58,15 @@ struct ContentView: View {
             ActivityView(url: store?.shareURL ?? Channel.home.url)
                 .presentationDetents([.medium])
         }
+    }
+
+    /// 频道切换的唯一入口：在用户事件上下文里先创建 store，再改选中态。
+    /// 顺序反过来会让 body 先读到 nil，随后在 SwiftUI 视图更新事务内发布
+    /// objectWillChange，iOS 26 上这次刷新会被丢弃，表现为「点了没反应」。
+    private func selectChannel(_ channel: Channel) {
+        guard channel != ui.selected else { return }
+        router.ensure(channel)
+        ui.selected = channel
     }
 
     // MARK: - Top

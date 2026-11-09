@@ -32,7 +32,8 @@ struct ToolButton: View {
 }
 
 struct ChannelBar: View {
-    @Binding var selected: Channel
+    let selected: Channel
+    let onSelect: (Channel) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -40,7 +41,7 @@ struct ChannelBar: View {
                 ForEach(Channel.all) { channel in
                     let active = selected == channel
                     Button {
-                        selected = channel
+                        onSelect(channel)
                     } label: {
                         Label(channel.title, systemImage: channel.symbol)
                             .font(.system(size: 13, weight: active ? .semibold : .medium))
@@ -50,6 +51,8 @@ struct ChannelBar: View {
                             .background(
                                 Capsule().fill(active ? Color.accentColor : Color(.secondarySystemBackground))
                             )
+                            // 扩大命中区域到整个胶囊，避免横向 ScrollView 吞掉点击。
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
