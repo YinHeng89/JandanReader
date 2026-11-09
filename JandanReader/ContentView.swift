@@ -6,18 +6,14 @@ struct ContentView: View {
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var router: WebRouter
 
-    @State private var selected: Channel = .home
-    @State private var showSettings = false
-    @State private var showHistory = false
-    @State private var showShare = false
-    @State private var didConfigure = false
+    @StateObject private var ui = ContentViewState()
 
-    private var store: WebStore? { router.store(for: selected) }
+    private var store: WebStore? { router.store(for: ui.selected) }
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            ChannelBar(selected: $selected)
+            ChannelBar(selected: $ui.selected)
             ProgressLine(progress: store?.progress ?? 0, isLoading: store?.isLoading ?? false)
 
             webContent
@@ -27,35 +23,35 @@ struct ContentView: View {
         .background(Color(.systemBackground).ignoresSafeArea())
         .preferredColorScheme(settings.darkMode ? .dark : .light)
         .onAppear {
-            guard !didConfigure else { return }
-            didConfigure = true
+            guard !ui.didConfigure else { return }
+            ui.didConfigure = true
             router.configure(settings: settings, history: history) { url in
                 UIApplication.shared.open(url)
             }
-            selected = Channel.withID(settings.lastChannelID)
-            router.ensure(selected)
+            ui.selected = Channel.withID(settings.lastChannelID)
+            router.ensure(ui.selected)
         }
-        .onChange(of: selected) { _, newValue in
+        .onChange(of: ui.selected) { _, newValue in
             settings.lastChannelID = newValue.id
             router.ensure(newValue)
         }
         .onChange(of: settings.darkMode) { _, _ in router.applySettings() }
         .onChange(of: settings.cleanMode) { _, _ in router.applySettings() }
         .onChange(of: settings.fontScale) { _, _ in router.applySettings() }
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $ui.showSettings) {
             SettingsView { url in
-                router.open(url, in: selected)
+                router.open(url, in: ui.selected)
             }
             .environmentObject(settings)
             .environmentObject(history)
         }
-        .sheet(isPresented: $showHistory) {
+        .sheet(isPresented: $ui.showHistory) {
             HistoryView { url in
-                router.open(url, in: selected)
+                router.open(url, in: ui.selected)
             }
             .environmentObject(history)
         }
-        .sheet(isPresented: $showShare) {
+        .sheet(isPresented: $ui.showShare) {
             ActivityView(url: store?.shareURL ?? Channel.home.url)
                 .presentationDetents([.medium])
         }
@@ -73,7 +69,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            Button { showHistory = true } label: {
+            Button { ui.showHistory = true } label: {
                 IconButton(systemName: "clock.arrow.circlepath")
             }
             .buttonStyle(.plain)
@@ -81,7 +77,7 @@ struct ContentView: View {
                 IconButton(systemName: settings.darkMode ? "sun.max.fill" : "moon.fill")
             }
             .buttonStyle(.plain)
-            Button { showSettings = true } label: {
+            Button { ui.showSettings = true } label: {
                 IconButton(systemName: "gearshape.fill")
             }
             .buttonStyle(.plain)
@@ -109,7 +105,7 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     ProgressView()
                         .tint(Color.accentColor)
-                    Text("正在打开 \(selected.title)")
+                    Text("正在打开 \(ui.selected.title)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -160,7 +156,7 @@ struct ContentView: View {
                     store?.loadChannel()
                 }
                 ToolButton(systemName: "square.and.arrow.up") {
-                    showShare = true
+                    ui.showShare = true
                 }
                 ToolButton(systemName: "safari") {
                     if let url = store?.shareURL { UIApplication.shared.open(url) }

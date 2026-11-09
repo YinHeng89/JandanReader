@@ -5,8 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var history: HistoryStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var clearingCache = false
-    @State private var cacheCleared = false
+    @StateObject private var ui = SettingsViewState()
     let onOpen: (URL) -> Void
 
     private func open(_ path: String) {
@@ -72,23 +71,23 @@ struct SettingsView: View {
                     .disabled(history.items.isEmpty)
                     Button {
                         Task {
-                            clearingCache = true
+                            ui.clearingCache = true
                             await WebCache.clear()
-                            clearingCache = false
-                            cacheCleared = true
+                            ui.clearingCache = false
+                            ui.cacheCleared = true
                         }
                     } label: {
                         HStack {
                             Label("清除网页缓存", systemImage: "xmark.circle")
-                            if clearingCache { Spacer(); ProgressView() }
-                            if cacheCleared && !clearingCache {
+                            if ui.clearingCache { Spacer(); ProgressView() }
+                            if ui.cacheCleared && !ui.clearingCache {
                                 Spacer()
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                             }
                         }
                     }
-                    .disabled(clearingCache)
+                    .disabled(ui.clearingCache)
                 } header: {
                     Text("数据")
                 } footer: {

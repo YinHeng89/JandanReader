@@ -21,10 +21,12 @@
 		9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10143E5578846E64131CD76C /* Components.swift */; };
 		AB2FA898B5F70534AA8B572A /* WebRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F71498310F29D5DD682B29 /* WebRouter.swift */; };
 		D0675DF90D7AB06F8B947BF4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */; };
+		F4067C9646AA7080686E3820 /* ViewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1B3C02D08CF5687F3AE318 /* ViewState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0EEDE3EB317308FA0C668699 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		0F1B3C02D08CF5687F3AE318 /* ViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewState.swift; sourceTree = "<group>"; };
 		10143E5578846E64131CD76C /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		29BC3B884B09EBA3D6190FDA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -99,6 +101,7 @@
 				68A7EDE95770203EDE96407F /* AppSettings.swift */,
 				8FC214C1C9A26442324FFAFF /* Channel.swift */,
 				AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */,
+				0F1B3C02D08CF5687F3AE318 /* ViewState.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -134,6 +137,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					86D591DFDCBE225F4DA0564D = {
+						DevelopmentTeam = QQ9F8WHWZQ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -183,6 +187,7 @@
 				15498928784218FCB904B679 /* JandanReaderApp.swift in Sources */,
 				20A0CCB7DE600CEC8B09FA90 /* PageScripts.swift in Sources */,
 				D0675DF90D7AB06F8B947BF4 /* SettingsView.swift in Sources */,
+				F4067C9646AA7080686E3820 /* ViewState.swift in Sources */,
 				AB2FA898B5F70534AA8B572A /* WebRouter.swift in Sources */,
 				8F0EA5372A1E836F79F139E1 /* WebStore.swift in Sources */,
 				44A9433341D3093A58CA25D0 /* WebViewContainer.swift in Sources */,
@@ -326,6 +331,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -347,6 +353,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
