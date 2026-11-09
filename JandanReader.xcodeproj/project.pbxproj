@@ -1,0 +1,388 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		15498928784218FCB904B679 /* JandanReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896B1B305C4A7A0BB6DBD24A /* JandanReaderApp.swift */; };
+		1753289016082D4FDA5DF7FB /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */; };
+		20A0CCB7DE600CEC8B09FA90 /* PageScripts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36AF0CD3B7B023B14E04959 /* PageScripts.swift */; };
+		30D58ED5DAC1564B0861D7DF /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EEDE3EB317308FA0C668699 /* ActivityView.swift */; };
+		3A2A62383415019D3FE604B7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ADC0E5C6440318094FE4812 /* Assets.xcassets */; };
+		44A9433341D3093A58CA25D0 /* WebViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */; };
+		629F377A0D5F97763459457D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BC3B884B09EBA3D6190FDA /* ContentView.swift */; };
+		7BCF849A10BF86BDB05AA7D0 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7EDE95770203EDE96407F /* AppSettings.swift */; };
+		8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9544B75B0717D6E90982EA8D /* HistoryView.swift */; };
+		8F0EA5372A1E836F79F139E1 /* WebStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C109D1E890B16C618EBED6 /* WebStore.swift */; };
+		91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC214C1C9A26442324FFAFF /* Channel.swift */; };
+		9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10143E5578846E64131CD76C /* Components.swift */; };
+		AB2FA898B5F70534AA8B572A /* WebRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F71498310F29D5DD682B29 /* WebRouter.swift */; };
+		D0675DF90D7AB06F8B947BF4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0EEDE3EB317308FA0C668699 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		10143E5578846E64131CD76C /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		29BC3B884B09EBA3D6190FDA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewContainer.swift; sourceTree = "<group>"; };
+		68A7EDE95770203EDE96407F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		896B1B305C4A7A0BB6DBD24A /* JandanReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JandanReaderApp.swift; sourceTree = "<group>"; };
+		8FC214C1C9A26442324FFAFF /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
+		9544B75B0717D6E90982EA8D /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		9ADC0E5C6440318094FE4812 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		D4F71498310F29D5DD682B29 /* WebRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRouter.swift; sourceTree = "<group>"; };
+		E8C109D1E890B16C618EBED6 /* WebStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebStore.swift; sourceTree = "<group>"; };
+		F36AF0CD3B7B023B14E04959 /* PageScripts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageScripts.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		9C89CA23DC6430CB393870F1 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				0EEDE3EB317308FA0C668699 /* ActivityView.swift */,
+				10143E5578846E64131CD76C /* Components.swift */,
+				9544B75B0717D6E90982EA8D /* HistoryView.swift */,
+				4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		9E37C5EC0B0DAC6AA7D5918E = {
+			isa = PBXGroup;
+			children = (
+				D35AB39ABA00E24405B45666 /* JandanReader */,
+				E321B25975BF2A5DF91DDC01 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C5296A1192F8E4796C2608C8 /* Web */ = {
+			isa = PBXGroup;
+			children = (
+				F36AF0CD3B7B023B14E04959 /* PageScripts.swift */,
+				D4F71498310F29D5DD682B29 /* WebRouter.swift */,
+				E8C109D1E890B16C618EBED6 /* WebStore.swift */,
+				66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */,
+			);
+			path = Web;
+			sourceTree = "<group>";
+		};
+		D35AB39ABA00E24405B45666 /* JandanReader */ = {
+			isa = PBXGroup;
+			children = (
+				F48C51B25E04FD5E201618F6 /* Models */,
+				9C89CA23DC6430CB393870F1 /* Views */,
+				C5296A1192F8E4796C2608C8 /* Web */,
+				9ADC0E5C6440318094FE4812 /* Assets.xcassets */,
+				29BC3B884B09EBA3D6190FDA /* ContentView.swift */,
+				896B1B305C4A7A0BB6DBD24A /* JandanReaderApp.swift */,
+			);
+			path = JandanReader;
+			sourceTree = "<group>";
+		};
+		E321B25975BF2A5DF91DDC01 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F48C51B25E04FD5E201618F6 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				68A7EDE95770203EDE96407F /* AppSettings.swift */,
+				8FC214C1C9A26442324FFAFF /* Channel.swift */,
+				AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		86D591DFDCBE225F4DA0564D /* JandanReader */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6A4D2D5DE3173342555923FD /* Build configuration list for PBXNativeTarget "JandanReader" */;
+			buildPhases = (
+				90595055FC9D0384904444EF /* Sources */,
+				D3F24FF21204FDCC4FFADABB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JandanReader;
+			packageProductDependencies = (
+			);
+			productName = JandanReader;
+			productReference = 4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		74E57B539C5062B2334F1491 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					86D591DFDCBE225F4DA0564D = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 48BCF34F300C972FD05B482F /* Build configuration list for PBXProject "JandanReader" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9E37C5EC0B0DAC6AA7D5918E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E321B25975BF2A5DF91DDC01 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				86D591DFDCBE225F4DA0564D /* JandanReader */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D3F24FF21204FDCC4FFADABB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A2A62383415019D3FE604B7 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		90595055FC9D0384904444EF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30D58ED5DAC1564B0861D7DF /* ActivityView.swift in Sources */,
+				7BCF849A10BF86BDB05AA7D0 /* AppSettings.swift in Sources */,
+				91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */,
+				9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */,
+				629F377A0D5F97763459457D /* ContentView.swift in Sources */,
+				1753289016082D4FDA5DF7FB /* HistoryStore.swift in Sources */,
+				8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */,
+				15498928784218FCB904B679 /* JandanReaderApp.swift in Sources */,
+				20A0CCB7DE600CEC8B09FA90 /* PageScripts.swift in Sources */,
+				D0675DF90D7AB06F8B947BF4 /* SettingsView.swift in Sources */,
+				AB2FA898B5F70534AA8B572A /* WebRouter.swift in Sources */,
+				8F0EA5372A1E836F79F139E1 /* WebStore.swift in Sources */,
+				44A9433341D3093A58CA25D0 /* WebViewContainer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		05031CD118BF4D27B9361756 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		42EDFA82A810F2EAAB3D2F2A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		46CF24DEF7B225633475C142 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JandanReader/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinheng.JandanReader;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C7DE686B8E6C022B1BAF1F13 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JandanReader/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinheng.JandanReader;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		48BCF34F300C972FD05B482F /* Build configuration list for PBXProject "JandanReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42EDFA82A810F2EAAB3D2F2A /* Debug */,
+				05031CD118BF4D27B9361756 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6A4D2D5DE3173342555923FD /* Build configuration list for PBXNativeTarget "JandanReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				46CF24DEF7B225633475C142 /* Debug */,
+				C7DE686B8E6C022B1BAF1F13 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 74E57B539C5062B2334F1491 /* Project object */;
+}

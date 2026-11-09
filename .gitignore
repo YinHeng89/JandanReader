@@ -1,0 +1,14 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+.DS_Store
+
+# Info.plist 由 XcodeGen 生成，但随工程一起提交，保证 clone 后开箱即用
