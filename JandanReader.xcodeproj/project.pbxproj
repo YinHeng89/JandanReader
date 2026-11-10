@@ -33,7 +33,7 @@
 		10143E5578846E64131CD76C /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		29BC3B884B09EBA3D6190FDA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		38F4B2EC9DC6ADB655E14FF0 /* AccountWebStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountWebStore.swift; sourceTree = "<group>"; };
-		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		66E33D8B045CB6513BB3C789 /* WebViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewContainer.swift; sourceTree = "<group>"; };
 		68A7EDE95770203EDE96407F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -146,6 +146,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					86D591DFDCBE225F4DA0564D = {
+						DevelopmentTeam = QQ9F8WHWZQ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -342,7 +343,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -364,7 +365,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
