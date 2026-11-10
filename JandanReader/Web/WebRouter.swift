@@ -38,6 +38,17 @@ final class WebRouter: ObservableObject {
         stores.values.forEach { $0.applySettings() }
     }
 
+    /// 切主题时标记所有 store 的缓存快照已过期，返回过渡需要遮罩兜底。
+    func markThemeStale() {
+        stores.values.forEach { $0.markThemeStale() }
+    }
+
+    /// 切主题后让当前可见页以新主题重新渲染，WebKit 才会在下次离开该页时
+    /// 重新捕获历史条目的位图快照；否则手势返回仍会显示旧的深色快照。
+    func reloadVisible(_ channel: Channel) {
+        stores[channel.id]?.reloadPreservingOffset()
+    }
+
     /// 所有「从原生侧打开 URL」的入口（设置页、阅读历史、顶栏、功能页回传）
     /// 统一走这里：功能页一律交给外壳独立呈现，不落回频道 WebView。
     /// 判定只放这一处，避免各入口各写一套导致设置页这类后门漏掉。

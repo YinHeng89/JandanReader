@@ -92,6 +92,8 @@ extension AccountWebStore: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         isLoading = false
+        // -999 是请求被主动取消（快速连点 / 打断），不是加载失败。
+        guard (error as NSError).code != NSURLErrorCancelled else { return }
         errorMessage = error.localizedDescription
     }
 

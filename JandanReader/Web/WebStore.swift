@@ -20,6 +20,17 @@ final class WebStore: NSObject, ObservableObject {
     private weak var history: HistoryStore?
     private var observations: [NSKeyValueObservation] = []
 
+    /// 当前承载本 WebView 的容器，用于 back-forward 过渡遮罩。weak 避免
+    /// WebView → host → store 形成环；owningStore 校验避免复用时误盖。
+    weak var host: WebHostView?
+    private var backForwardPending = false
+    private var hasCommitted = false
+    private var pendingScrollOffset: CGPoint?
+
+    /// 切主题后，WebKit 缓存的历史条目位图仍是旧主题。本页以新主题
+    /// 重新渲染完成（didFinish）前都为 true，此期间返回过渡需要遮罩。
+    private(set) var themeSnapshotStale = false
+
     /// 站外链接交给系统浏览器。
     var openExternally: ((URL) -> Void)?
     /// 用户中心 / 会员 / 消息等功能页交给外壳独立呈现。
@@ -85,6 +96,11 @@ final class WebStore: NSObject, ObservableObject {
         observations = [progress, title]
     }
 
+    private var activeHost: WebHostView? {
+        guard let host, host.owningStore === self else { return nil }
+        return host
+    }
+
     // MARK: - Actions
 
     func load(_ url: URL) {
@@ -102,6 +118,15 @@ final class WebStore: NSObject, ObservableObject {
         webView.reload()
     }
 
+    /// 切换主题时用：让当前页以新主题重新渲染，WebKit 才会在下次离开时
+    /// 重新捕获历史条目的位图快照（旧的深色快照不会被更新）。
+    /// 保留滚动位置，不丢浏览栈。
+    func reloadPreservingOffset() {
+        errorMessage = nil
+        pendingScrollOffset = webView.scrollView.contentOffset
+        webView.reload()
+    }
+
     func goBack() { if webView.canGoBack { webView.goBack() } }
     func goForward() { if webView.canGoForward { webView.goForward() } }
 
@@ -114,10 +139,32 @@ final class WebStore: NSObject, ObservableObject {
 
     func applySettings() {
         guard let settings else { return }
+        activeHost?.darkMode = settings.darkMode
         evaluate(PageScripts.setDark(settings.darkMode))
         evaluate(PageScripts.setClean(settings.cleanMode))
         evaluate(PageScripts.setFont(settings.fontSizePercent))
         evaluate(PageScripts.hideDuplicateTitle())
+    }
+
+    // MARK: - Theme transition cover
+
+    /// 切换主题时由 router 标记：缓存快照可能还是旧主题。
+    func markThemeStale() { themeSnapshotStale = true }
+
+    /// 只在快照确实可能过期时遮盖，正常浏览不会平白闪一层纯色。
+    func beginThemeCover() {
+        guard themeSnapshotStale else { return }
+        activeHost?.showThemeCover(true)
+    }
+
+    func endThemeCover() { activeHost?.showThemeCover(false) }
+
+    func scheduleThemeCoverRelease() {
+        guard themeSnapshotStale else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            self.endThemeCover()
+        }
     }
 
     private func evaluate(_ script: String) {
@@ -129,6 +176,22 @@ final class WebStore: NSObject, ObservableObject {
         canGoForward = webView.canGoForward
         currentURL = webView.url
     }
+
+    private func finishLoading(_ webView: WKWebView) {
+        isLoading = false
+        progress = 0
+        webView.scrollView.refreshControl?.endRefreshing()
+        endThemeCover()
+    }
+
+    /// -999 = NSURLErrorCancelled：快速连点、policy cancel 后重新 load、
+    /// 手势打断旧请求都会产生，属于正常流程，不是加载失败。
+    private func shouldReport(_ error: Error, in webView: WKWebView) -> Bool {
+        guard (error as NSError).code != NSURLErrorCancelled else { return false }
+        // 本次导航已经成功 commit 出内容时，后续失败不该用全屏卡片盖住它。
+        guard !hasCommitted || webView.url == nil else { return false }
+        return true
+    }
 }
 
 // MARK: - WKNavigationDelegate
@@ -138,42 +201,49 @@ extension WebStore: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
         errorMessage = nil
-        // 手势返回时 WKWebView 先展示历史条目快照/旧 DOM，这里先纠正一次，
-        // didCommit 再纠正一次，把旧模式可见的窗口压到最短。
+        hasCommitted = false
+        let covering = backForwardPending
+        backForwardPending = false
+        // 手势返回期间显示的是缓存位图，DOM 层同步改不到它，用主题色遮罩兜底。
+        if covering { beginThemeCover() }
         evaluate(PageScripts.syncDark())
         refreshNavigationState()
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        // 手势返回恢复 bfcache 时不会重跑 atDocumentStart 脚本，
-        // 文档一提交就按 localStorage 纠正 .dark-model，避免闪一帧旧模式。
+        hasCommitted = true
+        // bfcache 恢复不会重跑 atDocumentStart 脚本，文档提交后立刻纠正主题。
         evaluate(PageScripts.syncDark())
+        endThemeCover()
         refreshNavigationState()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        isLoading = false
-        progress = 0
-        webView.scrollView.refreshControl?.endRefreshing()
+        finishLoading(webView)
+        // 本页已用当前主题重绘，历史快照过期标记解除。
+        themeSnapshotStale = false
         pageTitle = webView.title?.isEmpty == false ? (webView.title ?? channel.title) : channel.title
         refreshNavigationState()
         history?.record(title: webView.title, url: webView.url)
         applySettings()
+        if let offset = pendingScrollOffset {
+            pendingScrollOffset = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                webView.scrollView.setContentOffset(offset, animated: false)
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        progress = 0
-        webView.scrollView.refreshControl?.endRefreshing()
+        finishLoading(webView)
+        guard shouldReport(error, in: webView) else { return }
         errorMessage = error.localizedDescription
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        progress = 0
-        webView.scrollView.refreshControl?.endRefreshing()
-        let nsError = error as NSError
-        guard nsError.code != NSURLErrorCancelled else { return }
+        finishLoading(webView)
+        guard shouldReport(error, in: webView) else { return }
         errorMessage = error.localizedDescription
     }
 
@@ -182,6 +252,8 @@ extension WebStore: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        if navigationAction.navigationType == .backForward { backForwardPending = true }
+
         guard let url = navigationAction.request.url else {
             decisionHandler(.allow)
             return

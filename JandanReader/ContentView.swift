@@ -41,7 +41,13 @@ struct ContentView: View {
             // 兜底：从历史/外部跳转恢复时确保 store 存在；常规点击已在 selectChannel 建好。
             router.ensure(newValue)
         }
-        .onChange(of: settings.darkMode) { _, _ in router.applySettings() }
+        .onChange(of: settings.darkMode) { _, _ in
+            router.applySettings()
+            // DOM 改了不代表手势返回的位图快照改了：标记过期（过渡遮罩生效），
+            // 再让当前页以新主题重绘一次，刷新缓存快照。
+            router.markThemeStale()
+            router.reloadVisible(ui.selected)
+        }
         .onChange(of: settings.cleanMode) { _, _ in router.applySettings() }
         .onChange(of: settings.fontScale) { _, _ in router.applySettings() }
         .sheet(isPresented: $ui.showSettings) {
