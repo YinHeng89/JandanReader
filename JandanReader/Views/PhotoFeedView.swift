@@ -56,12 +56,15 @@ struct PhotoFeedView: View {
                             expanded: store.expandedCommentID == item.id,
                             onOpen: { store.push(.feed(item)) },
                             onComments: {
+                                let wasExpanded = store.expandedCommentID == item.id
                                 store.toggleInlineComments(for: item)
-                                // 行高变化后 List 的滚动锚点不稳定（有时往上跳、有时往下滚），
-                                // 显式滚回被点击行顶部，保证展开/收起行为一致。
-                                DispatchQueue.main.async {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        proxy.scrollTo(item.id, anchor: .top)
+                                // 展开时以评论区域为锚点（不是整行图片顶部），
+                                // 评论异步加载向下扩展也不会把锚点顶走。
+                                if !wasExpanded {
+                                    DispatchQueue.main.async {
+                                        withAnimation(.easeOut(duration: 0.2)) {
+                                            proxy.scrollTo("comments-\(item.id)", anchor: .top)
+                                        }
                                     }
                                 }
                             },
@@ -76,6 +79,7 @@ struct PhotoFeedView: View {
                         )
                         if store.expandedCommentID == item.id {
                             InlineCommentsView(item: item, store: store)
+                                .id("comments-\(item.id)")
                         }
                     }
                     .id(item.id)
