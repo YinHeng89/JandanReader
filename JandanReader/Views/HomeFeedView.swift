@@ -165,8 +165,17 @@ private struct HomeRow: View {
                 .foregroundStyle(Color(.tertiaryLabel))
                 .frame(width: 36, alignment: .leading)
 
-            // 文字区 + 右侧站点缩略图（thumb180），与官方列表布局一致。
+            // 站点缩略图（thumb180）前置，文字区在后。
             HStack(alignment: .top, spacing: 10) {
+                if let raw = item.imageURL,
+                   let url = URL(string: raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw) {
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    }
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text(item.title)
                         .font(.system(size: 15, weight: .semibold))
@@ -200,15 +209,6 @@ private struct HomeRow: View {
                                 .lineLimit(2)
                         }
                     }
-                }
-
-                if let raw = item.imageURL,
-                   let url = URL(string: raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw) {
-                    CachedAsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    }
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
             Spacer(minLength: 0)
