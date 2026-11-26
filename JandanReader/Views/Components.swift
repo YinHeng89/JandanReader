@@ -4,6 +4,9 @@ import SwiftUI
 /// 用 @StateObject 持有引用类型来记录“是否已滚到底部”。
 final class LoadMoreSentinel: ObservableObject {
     var visible = false
+    /// 哨兵触发翻页的去抖任务：行高变化或展开评论会让哨兵短暂进入视口，
+    /// 立刻请求会在置顶 / 展开动画期间改变内容高度，把滚动位置冲掉。
+    var pendingLoad: Task<Void, Never>?
 }
 
 struct IconButton: View {

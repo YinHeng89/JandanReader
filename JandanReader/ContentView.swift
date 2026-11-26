@@ -1,6 +1,82 @@
 import SwiftUI
 import UIKit
 
+/// 重复点击当前 Tab 时的「精确置顶」兜底——纯观察，不干预系统行为。
+///
+/// 系统 TabView 自带 pop-to-root + scroll-to-top，但实测有两个缺陷：
+/// 1. 只滚到 -adjustedContentInset.top（小标题态 116），不会恢复大标题展开态（168），
+///    第一条内容被裁掉、顶部少 52pt；
+/// 2. 滚动时自动翻页会在动画期间改变内容高度，把滚动打断在任意位置。
+/// 这里只观察 tab bar 区域的点击：不改 delegate、不吞触摸、不改 selection，
+/// 系统行为完全保留，仅在动画结束后补一次置顶并把大标题拉回展开态。
+final class TabTopFix: NSObject, UIGestureRecognizerDelegate {
+    var tabCount = 0
+    var currentIndex: (() -> Int)?
+    private weak var installedWindow: UIWindow?
+
+    /// 幂等挂载：keyWindow 出现时机不固定，切 tab 时会再调一次。
+    func install(on window: UIWindow) {
+        guard installedWindow !== window else { return }
+        installedWindow = window
+        let tap = UITapGestureRecognizer(target: self, action: #selector(windowTapped(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        window.addGestureRecognizer(tap)
+    }
+
+    @objc private func windowTapped(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended,
+              let window = gesture.view as? UIWindow,
+              tabCount > 0,
+              let selected = currentIndex?(),
+              (0..<tabCount).contains(selected) else { return }
+        let point = gesture.location(in: window)
+        guard point.y >= window.bounds.height - 96 else { return }
+        let each = window.bounds.width / CGFloat(tabCount)
+        guard Int(point.x / max(each, 1)) == selected,
+              selected < Channel.all.count else { return }
+        // 等系统 pop-to-root / scroll-to-top 动画结束再补一次精确置顶。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak window] in
+            guard let window else { return }
+            Self.fixTop(in: window)
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    private static func fixTop(in window: UIWindow) {
+        var best: UIScrollView?
+        func walk(_ view: UIView) {
+            if view.isHidden || view.alpha < 0.01 { return }
+            if let scroll = view as? UIScrollView,
+               scroll.window === window,
+               scroll.bounds.height > 300 {
+                if best == nil || scroll.bounds.height > best!.bounds.height { best = scroll }
+            }
+            for sub in view.subviews { walk(sub) }
+        }
+        walk(window)
+        guard let scroll = best else { return }
+        // 已经处于大标题展开态的顶部就不动，避免重复拉扯。
+        guard scroll.contentOffset.y > -150 else { return }
+        // 第一步：比 -inset.top 再多拉一个大标题高度，触发导航栏重新展开。
+        // 展开后 inset 从 116 变 168，系统会把 offset 一并带走（实测 -220），
+        // 顶部因此多出 52pt 空白；第二步再精确归位到 -inset.top（大标题态 -168）。
+        scroll.setContentOffset(
+            CGPoint(x: 0, y: -scroll.adjustedContentInset.top - 52), animated: false
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak scroll] in
+            guard let scroll, scroll.adjustedContentInset.top > 130 else { return }
+            scroll.setContentOffset(
+                CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false
+            )
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var history: HistoryStore
@@ -31,8 +107,11 @@ struct ContentView: View {
                 // 登录态存在 Cookie 里，但 user 需要请求 /member/get_info 才能拿到。
                 // 不在启动时 refresh 的话，重启后 auth.isLoggedIn 一直是 false。
                 Task { await auth.refresh() }
+                configureTabTopFix()
             }
             .onChange(of: ui.selected) { _, newValue in
+                // 每次切 tab 再挂一次（幂等），兜住启动时 window 尚未就绪的情况。
+                Self.attachTabTopFix(controller: ui.tabTopFix)
                 if case .channel(let channel) = newValue {
                     settings.lastChannelID = channel.id
                 }
@@ -56,6 +135,33 @@ struct ContentView: View {
                 AccountView()
                     .environmentObject(auth)
             }
+    }
+
+    private func configureTabTopFix() {
+        ui.tabTopFix.tabCount = Channel.all.count + 1
+        let state = ui
+        ui.tabTopFix.currentIndex = { [weak state] in
+            guard let state else { return -1 }
+            switch state.selected {
+            case .channel(let channel):
+                return Channel.all.firstIndex(of: channel) ?? -1
+            case .settings:
+                return Channel.all.count
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak state] in
+            guard let state else { return }
+            Self.attachTabTopFix(controller: state.tabTopFix)
+        }
+    }
+
+    /// keyWindow 在多 scene 下可能取不到，退回第一个 window；install 幂等。
+    private static func attachTabTopFix(controller: TabTopFix) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        var windows: [UIWindow] = []
+        for scene in scenes { windows.append(contentsOf: scene.windows) }
+        guard let window = windows.first(where: { $0.isKeyWindow }) ?? windows.first else { return }
+        controller.install(on: window)
     }
 
     // MARK: - Tabs（Apple 官方 TabView / Tab，iOS 26 自动液态玻璃）

@@ -50,7 +50,9 @@ struct PhotoFeedView: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                    VStack(alignment: .leading, spacing: 0) {
+                    // 评论区必须是 List 的顶层 row：ScrollViewReader 只注册顶层 row 的 id，
+                    // 挂在行内 VStack 子视图上的 id 永远滚不到。
+                    Group {
                         PhotoRow(
                             item: item,
                             expanded: store.expandedCommentID == item.id,
@@ -58,13 +60,10 @@ struct PhotoFeedView: View {
                             onComments: {
                                 let wasExpanded = store.expandedCommentID == item.id
                                 store.toggleInlineComments(for: item)
-                                // 展开时以评论区域为锚点（不是整行图片顶部），
-                                // 评论异步加载向下扩展也不会把锚点顶走。
+                                // 等新 row 插入视图树后再滚到评论区顶部。
                                 if !wasExpanded {
-                                    DispatchQueue.main.async {
-                                        withAnimation(.easeOut(duration: 0.2)) {
-                                            proxy.scrollTo("comments-\(item.id)", anchor: .top)
-                                        }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                        proxy.scrollTo("comments-\(item.id)", anchor: .top)
                                     }
                                 }
                             },
@@ -77,15 +76,17 @@ struct PhotoFeedView: View {
                             },
                             onNotice: { store.showToast($0) }
                         )
+                        .id(item.id)
+                        // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
+                        .listRowSeparator(.hidden)
+                        .onAppear { prefetchIfNeeded(index: index) }
+
                         if store.expandedCommentID == item.id {
                             InlineCommentsView(item: item, store: store)
                                 .id("comments-\(item.id)")
+                                .listRowSeparator(.hidden)
                         }
                     }
-                    .id(item.id)
-                    // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
-                    .listRowSeparator(.hidden)
-                    .onAppear { prefetchIfNeeded(index: index) }
                 }
                 loadMoreSection
             }
@@ -144,22 +145,42 @@ struct PhotoFeedView: View {
         .onAppear(perform: handleTriggerAppear)
         .onDisappear(perform: handleTriggerDisappear)
         .onChange(of: store.items.count) { _, _ in handleItemsCountChange() }
+        // 收起评论后若仍停在底部，重新调度翻页（展开期间是被抑制的）。
+        .onChange(of: store.expandedCommentID) { _, _ in
+            if sentinel.visible { scheduleLoadMore() }
+        }
     }
 
     private func handleTriggerAppear() {
         sentinel.visible = true
-        triggerLoadMore()
+        scheduleLoadMore()
     }
 
-    private func handleTriggerDisappear() { sentinel.visible = false }
+    private func handleTriggerDisappear() {
+        sentinel.visible = false
+        sentinel.pendingLoad?.cancel()
+        sentinel.pendingLoad = nil
+    }
 
     private func handleItemsCountChange() {
-        // 新一页不足一屏时 sentinel 不会重新出现，数据变化后补一次触发。
-        if sentinel.visible { triggerLoadMore() }
+        // 新一页不足一屏时哨兵不会重新出现，数据变化后补一次（同样走去抖）。
+        if sentinel.visible { scheduleLoadMore() }
+    }
+
+    /// 哨兵出现后延迟一拍再翻页，避免行高变化 / 展开评论时连锁追加内容。
+    private func scheduleLoadMore() {
+        sentinel.pendingLoad?.cancel()
+        sentinel.pendingLoad = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, sentinel.visible else { return }
+            triggerLoadMore()
+        }
     }
 
     private func triggerLoadMore() {
         guard store.cursor != nil, !store.isLoadingMore else { return }
+        // 评论展开期间行高会变，先不翻页，收起后由 onChange 重新调度。
+        guard store.expandedCommentID == nil else { return }
         Task { await store.loadMore() }
     }
 

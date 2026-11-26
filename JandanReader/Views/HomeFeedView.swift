@@ -127,14 +127,28 @@ struct HomeFeedView: View {
 
     private func handleTriggerAppear() {
         sentinel.visible = true
-        triggerLoadMore()
+        scheduleLoadMore()
     }
 
-    private func handleTriggerDisappear() { sentinel.visible = false }
+    private func handleTriggerDisappear() {
+        sentinel.visible = false
+        sentinel.pendingLoad?.cancel()
+        sentinel.pendingLoad = nil
+    }
 
     private func handleItemsCountChange() {
-        // 新一页不足一屏时 sentinel 不会重新出现，数据变化后补一次触发。
-        if sentinel.visible { triggerLoadMore() }
+        // 新一页不足一屏时哨兵不会重新出现，数据变化后补一次（同样走去抖）。
+        if sentinel.visible { scheduleLoadMore() }
+    }
+
+    /// 哨兵出现后延迟一拍再翻页，避免置顶动画期间连锁追加内容把滚动位置冲掉。
+    private func scheduleLoadMore() {
+        sentinel.pendingLoad?.cancel()
+        sentinel.pendingLoad = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, sentinel.visible else { return }
+            triggerLoadMore()
+        }
     }
 
     private func triggerLoadMore() {
