@@ -48,56 +48,43 @@ struct HomeFeedView: View {
     }
 
     private var list: some View {
-        ScrollViewReader { proxy in
-            List {
-                ForEach(sections, id: \.date) { section in
-                    Section {
-                        ForEach(section.items) { item in
-                            Button { store.push(.feed(item)) } label: {
-                                HomeRow(item: item)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if let nickname = item.tucaoNickname, !nickname.isEmpty {
-                                    Button(role: .destructive) {
-                                        banned.block(userID: nil, nickname: nickname)
-                                    } label: {
-                                        Label("屏蔽用户", systemImage: "hand.raised.slash")
-                                    }
+        List {
+            ForEach(sections, id: \.date) { section in
+                Section {
+                    ForEach(section.items) { item in
+                        Button { store.push(.feed(item)) } label: {
+                            HomeRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            if let nickname = item.tucaoNickname, !nickname.isEmpty {
+                                Button(role: .destructive) {
+                                    banned.block(userID: nil, nickname: nickname)
+                                } label: {
+                                    Label("屏蔽用户", systemImage: "hand.raised.slash")
                                 }
                             }
                         }
-                    } header: {
-                        // Plain List 的 Section header 原生吸顶；压缩字号与边距，避免顶部过高。
-                        Text(section.date.jdSectionDate)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                     }
-                }
-                loadMoreSection
-            }
-            .listStyle(.plain)
-            .refreshable { await store.reload() }
-            .overlay(alignment: .top) {
-                if store.hasNewContent {
-                    NewContentBanner { Task { await store.acceptNewContent() } }
-                        .padding(.top, 8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+                } header: {
+                    // Plain List 的 Section header 原生吸顶；压缩字号与边距，避免顶部过高。
+                    Text(section.date.jdSectionDate)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
-                guard note.object as? String == store.channel.id else { return }
-                Task { @MainActor in
-                    // 先刷新再置顶：reload 会重建列表，先滚动会被冲掉。
-                    await store.reload()
-                    // 用真实 Section 作为置顶目标，不插占位行（Plain List 会给占位行画分隔线）。
-                    if let target = sections.first?.date {
-                        proxy.scrollTo(target, anchor: .top)
-                    }
-                }
+            loadMoreSection
+        }
+        .listStyle(.plain)
+        .refreshable { await store.reload() }
+        .overlay(alignment: .top) {
+            if store.hasNewContent {
+                NewContentBanner { Task { await store.acceptNewContent() } }
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
             }
         }
     }

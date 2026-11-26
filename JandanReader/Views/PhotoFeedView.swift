@@ -55,7 +55,16 @@ struct PhotoFeedView: View {
                             item: item,
                             expanded: store.expandedCommentID == item.id,
                             onOpen: { store.push(.feed(item)) },
-                            onComments: { store.toggleInlineComments(for: item) },
+                            onComments: {
+                                store.toggleInlineComments(for: item)
+                                // 行高变化后 List 的滚动锚点不稳定（有时往上跳、有时往下滚），
+                                // 显式滚回被点击行顶部，保证展开/收起行为一致。
+                                DispatchQueue.main.async {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        proxy.scrollTo(item.id, anchor: .top)
+                                    }
+                                }
+                            },
                             onVote: { like in
                                 Task { await store.vote(item: item, like: like) }
                             },
@@ -69,6 +78,7 @@ struct PhotoFeedView: View {
                             InlineCommentsView(item: item, store: store)
                         }
                     }
+                    .id(item.id)
                     // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
                     .listRowSeparator(.hidden)
                     .onAppear { prefetchIfNeeded(index: index) }
@@ -85,22 +95,13 @@ struct PhotoFeedView: View {
                         .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
-                guard note.object as? String == store.channel.id else { return }
-                Task { @MainActor in
-                    // 先刷新再置顶：reload 会重建列表，先滚动会被冲掉。
-                    await store.reload()
-                    // 不插占位行，直接滚到第一条内容（避免顶部出现分隔线）。
-                    if let target = visibleItems.first?.id {
-                        proxy.scrollTo(target, anchor: .top)
-                    }
-                }
-            }
         }
     }
 
     /// 距离底部还有 4 条时就开始取下一页，滚动时不再等网。
     private func prefetchIfNeeded(index: Int) {
+        // 评论展开时行高变化会让相邻行的 onAppear 重新触发，避免误触发翻页导致列表跳动。
+        guard store.expandedCommentID == nil else { return }
         guard index >= visibleItems.count - 4 else { return }
         triggerLoadMore()
     }
