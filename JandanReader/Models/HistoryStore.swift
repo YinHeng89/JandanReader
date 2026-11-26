@@ -6,12 +6,6 @@ struct HistoryItem: Codable, Identifiable, Hashable {
     let title: String
     let kind: String
     let date: Date
-
-    /// 用站点真实 URL 结构还原，方便「用 Safari 打开」。
-    var url: URL {
-        let prefix = kind == "forum" ? "forum" : "p"
-        return URL(string: "https://jandan.net/\(prefix)/\(postID)")!
-    }
 }
 
 @MainActor

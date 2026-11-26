@@ -96,8 +96,7 @@ struct ContentView: View {
                 ui.didConfigure = true
                 router.configure(
                     history: history,
-                    openAccount: { ui.showAccount = true },
-                    openExternally: { url in UIApplication.shared.open(url) }
+                    openAccount: { ui.showAccount = true }
                 )
                 router.switchChannel = { channel in ui.selected = .channel(channel) }
                 // TabView 三个 tab 同时存在，先把各自的 store 建好。

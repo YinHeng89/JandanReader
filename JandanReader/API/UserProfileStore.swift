@@ -14,11 +14,23 @@ final class UserProfileStore: ObservableObject {
     let userID: Int
 
     /// 同一用户二次进入直接复用，避免每次都等四个接口（最慢约 1s）。
-    private static var cache: [Int: (profile: JDUserProfile?, badges: [JDBadge], comments: [JDComment], tucaos: [JDComment])] = [:]
+    /// 带时间戳，超过 TTL / 容量上限自动淘汰，避免长期驻留内存。
+    private struct Cached {
+        let profile: JDUserProfile?
+        let badges: [JDBadge]
+        let comments: [JDComment]
+        let tucaos: [JDComment]
+        let at: Date
+    }
+
+    private static var cache: [Int: Cached] = [:]
+    private static let cacheTTL: TimeInterval = 300
+    private static let cacheLimit = 40
 
     init(userID: Int) {
         self.userID = userID
-        if let cached = Self.cache[userID] {
+        if let cached = Self.cache[userID],
+           Date().timeIntervalSince(cached.at) < Self.cacheTTL {
             self.profile = cached.profile
             self.badges = cached.badges
             self.comments = cached.comments
@@ -45,7 +57,15 @@ final class UserProfileStore: ObservableObject {
         badges = await b ?? []
         comments = await c ?? []
         tucaos = await t ?? []
-        Self.cache[userID] = (profile, badges, comments, tucaos)
+        let now = Date()
+        Self.cache = Self.cache.filter { now.timeIntervalSince($0.value.at) < Self.cacheTTL }
+        if Self.cache.count >= Self.cacheLimit,
+           let oldest = Self.cache.min(by: { $0.value.at < $1.value.at })?.key {
+            Self.cache.removeValue(forKey: oldest)
+        }
+        Self.cache[userID] = Cached(
+            profile: profile, badges: badges, comments: comments, tucaos: tucaos, at: now
+        )
         isLoading = false
     }
 }

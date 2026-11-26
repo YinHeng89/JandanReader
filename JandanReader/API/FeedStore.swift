@@ -20,11 +20,9 @@ final class FeedStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isLoadingMore = false
     @Published private(set) var errorMessage: String?
-    @Published private(set) var infoMessage: String?
     /// 轻量提示（投票失败等），2 秒自动消失。
     @Published var toastMessage: String?
     @Published private(set) var path: [JDNavigation] = []
-    @Published private(set) var forwardStack: [JDNavigation] = []
 
     /// 图片流：点击评论数后在当前条下方展开的吐槽，按评论 ID 缓存。
     @Published private(set) var expandedCommentID: Int?
@@ -41,8 +39,6 @@ final class FeedStore: ObservableObject {
         self.history = history
     }
 
-    func configure(history: HistoryStore) { self.history = history }
-
     /// 轻量提示：连续触发时只保留最后一条。
     func showToast(_ message: String) {
         toastMessage = message
@@ -52,24 +48,17 @@ final class FeedStore: ObservableObject {
         }
     }
 
-    var canGoBack: Bool { !path.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
-
     /// 首屏加载；已经加载过就只刷新，不丢列表。
     func load(force: Bool = false) async {
         guard !isLoading else { return }
         if loaded && !force { return }
         isLoading = true
         errorMessage = nil
-        infoMessage = nil
         do {
             let result = try await JDFeedLoader.load(source: source(page: initialPage))
             items = result.items
             cursor = result.nextPage
             loaded = true
-            if result.loginRequired {
-                infoMessage = "完整日报需要登录煎蛋账号"
-            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -258,29 +247,13 @@ final class FeedStore: ObservableObject {
         }
     }
 
-    // MARK: 浏览栈（对齐原来的后退 / 前进）
+    // MARK: 浏览栈
 
     func push(_ item: JDNavigation) {
         path.append(item)
-        forwardStack.removeAll()
         if case .feed(let feed) = item {
             history?.record(id: feed.detailID, title: feed.title, kind: feed.kind.rawValue)
         }
-    }
-
-    func goBack() {
-        guard let last = path.popLast() else { return }
-        forwardStack.append(last)
-    }
-
-    func goForward() {
-        guard let last = forwardStack.popLast() else { return }
-        path.append(last)
-    }
-
-    func popToRoot() {
-        path.removeAll()
-        forwardStack.removeAll()
     }
 
     var binding: Binding<[JDNavigation]> {

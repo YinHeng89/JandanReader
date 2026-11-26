@@ -1,7 +1,11 @@
 import Foundation
 
-/// SHA3-256（Keccak-f[1600]），与站点 CryptoJS `SHA3(e, {outputLength:256})` 一致。
+/// SHA3-256（Keccak-f[1600]，FIPS 202 domain separator 0x06）。
 /// 用于登录密码哈希；CryptoKit 不含 SHA3，且不想为此引入 SPM 依赖。
+///
+/// 注意：CryptoJS 的 `SHA3(e, {outputLength:256})` 实际是旧 Keccak（domain 0x01），
+/// 与本实现结果不同。站点登录到底按哪种校验仍需抓包确认（代码审查 P0-1），
+/// 在确认前不要仅凭这段注释认定算法与站点一致。
 enum SHA3 {
     private static let rate = 136 // 1088 bits / 8
     private static let rc: [UInt64] = [
@@ -12,7 +16,7 @@ enum SHA3 {
         0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
         0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
     ]
-    /// r[x][y]，x 为列、y 为行
+    /// 表按 y 外层 / x 内层存放，取值 rotation[y][x] 即标准 r[x][y]。
     private static let rotation: [[Int]] = [
         [0, 1, 62, 28, 27],
         [36, 44, 6, 55, 20],
@@ -23,9 +27,16 @@ enum SHA3 {
 
     static func sha256Hex(_ text: String) -> String {
         var bytes = Array(text.utf8)
-        bytes.append(0x06) // SHA3 domain separator（Keccak 用 0x01）
-        while bytes.count % rate != rate - 1 { bytes.append(0) }
-        bytes.append(0x80)
+        // pad10*1：消息后追加 0x06，补零到 rate-1，最后追加 0x80。
+        // 若消息本身占满 rate-1 字节，只剩 1 字节空间，domain bits 与结束位
+        // 必须合并成单字节 0x86；分开写会多吸收一整块，长输入哈希全错。
+        if bytes.count % rate == rate - 1 {
+            bytes.append(0x86) // 0x06 | 0x80
+        } else {
+            bytes.append(0x06)
+            while bytes.count % rate != rate - 1 { bytes.append(0) }
+            bytes.append(0x80)
+        }
 
         var state = [UInt64](repeating: 0, count: 25)
         var offset = 0

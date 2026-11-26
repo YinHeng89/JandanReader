@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var router: FeedRouter
+    @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -22,7 +23,7 @@ struct HistoryView: View {
                                     id: item.postID,
                                     title: item.title,
                                     kind: item.kind,
-                                    in: selectedChannel(for: item.kind)
+                                    in: currentChannel
                                 )
                                 dismiss()
                             } label: {
@@ -58,7 +59,9 @@ struct HistoryView: View {
         .presentationDetents([.medium, .large])
     }
 
-    private func selectedChannel(for kind: String) -> Channel {
-        kind == "comment" ? .withID("pic") : .home
+    /// 历史记录只存内容类型、不存所属频道；详情页路由与频道无关，
+    /// 统一落到当前频道，避免女装频道的评论历史被强行切到无聊图。
+    private var currentChannel: Channel {
+        Channel.withID(settings.lastChannelID)
     }
 }

@@ -212,17 +212,6 @@ struct JDForumPage: Codable {
     let list: [JDForumPost]
 }
 
-/// 日报条目（游客受限，list 通常为空）
-struct JDDailyPage: Codable {
-    let report_date: String?
-    let total: Int?
-    let page: Int?
-    let page_size: Int?
-    let is_login: Bool?
-    let access: String?
-    let list: [JDComment]
-}
-
 /// 吐槽列表。站点返回的是 comment_ID 那一套字段，先解成 JDArticleComment 再映射。
 struct JDTucaoPage: Codable {
     let code: Int?
@@ -328,27 +317,6 @@ struct JDFeedItem: Identifiable, Hashable {
         location = comment.ip_location
         avatar = comment.avatar_ref
         score = (comment.vote_positive ?? 0) - (comment.vote_negative ?? 0)
-        sectionDate = nil
-        tucaoNickname = nil
-        tucaoContent = nil
-        tucaoAvatar = nil
-    }
-
-    init(_ forum: JDForumPost) {
-        id = forum.post_id
-        kind = .forum
-        title = forum.title ?? ""
-        body = ""
-        author = forum.author_name ?? ""
-        authorID = forum.user_id
-        date = forum.create_time ?? ""
-        imageURL = nil
-        commentCount = forum.reply_count ?? 0
-        positive = forum.oo ?? 0
-        negative = forum.xx ?? 0
-        location = forum.location
-        avatar = forum.avatar_ref
-        score = (forum.oo ?? 0) - (forum.xx ?? 0)
         sectionDate = nil
         tucaoNickname = nil
         tucaoContent = nil

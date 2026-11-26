@@ -12,16 +12,10 @@ enum AppTab: Hashable {
 
 final class ContentViewState: ObservableObject {
     @Published var selected: AppTab = .channel(.home)
-    @Published var showShare = false
     @Published var showAccount = false
     @Published var didConfigure = false
     /// 点击当前 Tab 时的精确置顶兜底（纯观察，不改变系统 TabView 行为）。
     let tabTopFix = TabTopFix()
-}
-
-final class SettingsViewState: ObservableObject {
-    @Published var clearingCache = false
-    @Published var cacheCleared = false
 }
 
 /// 发布输入框状态。Xcode 27 下用 ObservableObject 代替 View 内 @State。

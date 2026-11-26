@@ -203,6 +203,7 @@ struct SettingsView: View {
                 HistoryView()
                     .environmentObject(history)
                     .environmentObject(router)
+                    .environmentObject(settings)
             }
         }
         .onAppear {

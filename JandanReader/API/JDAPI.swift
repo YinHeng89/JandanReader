@@ -297,7 +297,6 @@ struct JDFeedResult {
     let items: [JDFeedItem]
     /// 下一页游标；nil 表示没有更多
     let nextPage: Int?
-    let loginRequired: Bool
 }
 
 enum JDFeedLoader {
@@ -316,7 +315,7 @@ enum JDFeedLoader {
             let items = groups.flatMap { group in
                 group.posts.map { JDFeedItem($0, sectionDate: group.date) }
             }
-            return JDFeedResult(items: items, nextPage: items.isEmpty ? nil : page + 1, loginRequired: false)
+            return JDFeedResult(items: items, nextPage: items.isEmpty ? nil : page + 1)
 
         case .channel(let postID, let page):
             let result = try await JDAPI.get(
@@ -326,7 +325,7 @@ enum JDFeedLoader {
             )
             let items = result.list.map(JDFeedItem.init)
             let next = (result.current_page ?? 0) > 1 ? (result.current_page ?? 0) - 1 : nil
-            return JDFeedResult(items: items, nextPage: next, loginRequired: false)
+            return JDFeedResult(items: items, nextPage: next)
         }
     }
 }

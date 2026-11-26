@@ -8,7 +8,6 @@ final class NoticeStore: ObservableObject {
 
     @Published private(set) var unread = 0
     @Published private(set) var entries: [JDNotification] = []
-    @Published private(set) var total = 0
     @Published private(set) var isLoading = false
     @Published var toastMessage: String?
 
@@ -32,7 +31,6 @@ final class NoticeStore: ObservableObject {
         do {
             let result = try await JDAPI.notifications(page: page)
             entries = result.list ?? []
-            total = result.total ?? 0
             // 与官方一致：打开消息列表即把当前页标记已读。
             let ids = entries.filter { !$0.isRead }.map(\.id)
             if !ids.isEmpty {
@@ -72,6 +70,5 @@ final class NoticeStore: ObservableObject {
     func reset() {
         unread = 0
         entries = []
-        total = 0
     }
 }

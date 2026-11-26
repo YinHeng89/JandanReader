@@ -6,6 +6,9 @@ import Foundation
 final class ReportStore: ObservableObject {
     static let shared = ReportStore()
 
+    /// 已举报 ID 只增不减，长期会撑大 UserDefaults；超限时丢弃一半旧记录。
+    private let maxIDs = 2000
+
     private let storageKey = "jandan:reported_comments"
     private let defaults: UserDefaults
 
@@ -19,6 +22,8 @@ final class ReportStore: ObservableObject {
     func isReported(_ commentID: Int) -> Bool { ids.contains(commentID) }
 
     func mark(_ commentID: Int) {
+        guard !ids.contains(commentID) else { return }
+        if ids.count >= maxIDs { ids = Set(ids.prefix(maxIDs / 2)) }
         ids.insert(commentID)
         defaults.set(Array(ids), forKey: storageKey)
     }

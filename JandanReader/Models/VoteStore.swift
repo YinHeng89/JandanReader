@@ -7,6 +7,9 @@ import Foundation
 final class VoteStore: ObservableObject {
     static let shared = VoteStore()
 
+    /// 投票记录只增不减，长期会撑大 UserDefaults；超限时丢弃一半旧记录。
+    private let maxEntries = 2000
+
     @Published private(set) var kinds: [Int: Bool]
 
     private let storageKey = "jandan:vote_kinds"
@@ -30,6 +33,10 @@ final class VoteStore: ObservableObject {
 
     /// 投票成功后调用；同一条只能记录一个方向。
     func set(_ commentID: Int, like: Bool) {
+        if kinds[commentID] == nil, kinds.count >= maxEntries {
+            let keep = Set(kinds.keys.prefix(maxEntries / 2))
+            kinds = kinds.filter { keep.contains($0.key) }
+        }
         kinds[commentID] = like
         let raw = Dictionary(uniqueKeysWithValues: kinds.map { ("\($0.key)", $0.value) })
         defaults.set(raw, forKey: storageKey)

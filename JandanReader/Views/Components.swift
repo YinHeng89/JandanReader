@@ -9,20 +9,6 @@ final class LoadMoreSentinel: ObservableObject {
     var pendingLoad: Task<Void, Never>?
 }
 
-struct IconButton: View {
-    let systemName: String
-
-    var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Color.accentColor)
-            .frame(width: 32, height: 32)
-            .background(Color.accentColor.opacity(0.12), in: Circle())
-            .contentShape(Circle())
-            .accessibilityLabel(systemName)
-    }
-}
-
 /// 轻量提示：底部胶囊，2 秒自动消失，不打断当前页面。
 struct ToastModifier: ViewModifier {
     @Binding var message: String?
