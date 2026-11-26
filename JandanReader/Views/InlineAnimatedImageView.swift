@@ -101,24 +101,30 @@ enum InlineImagePhase {
     case loading, loaded, failed
 }
 
-/// 解码后的图片缓存。GIF 数据可达十几 MB，滚动时重复下载/解码会卡顿。
+/// 解码后的图片缓存。成本按解码后的位图内存计算，而不是原始 data 大小。
 final class InlineImageCache {
     static let shared = InlineImageCache()
 
     private let cache = NSCache<NSString, UIImage>()
 
     private init() {
-        // 约 160MB 的原始数据量上限，NSCache 会在内存紧张时自动回收。
-        cache.totalCostLimit = 160 * 1024 * 1024
-        cache.countLimit = 120
+        // 关键：一张 mw1024 图片的 JPEG 只有几百 KB，解码位图却要 4~6MB；
+        // 动画 GIF 131 帧解码后可达 80MB，文件本身只有 7MB。
+        // 旧实现按 data.count 计 cost，NSCache 以为没占内存就几乎不淘汰，
+        // 快速滑动时解码图持续堆积 → 内存压缩 / Jetsam → 列表卡死。
+        cache.totalCostLimit = 128 * 1024 * 1024
+        cache.countLimit = 60
     }
 
     func image(for url: URL) -> UIImage? {
         cache.object(forKey: url.absoluteString as NSString)
     }
 
-    func store(_ image: UIImage, dataCount: Int, for url: URL) {
-        cache.setObject(image, forKey: url.absoluteString as NSString, cost: dataCount)
+    func store(_ image: UIImage, for url: URL) {
+        // 解码位图约 4 字节/像素，动图再乘帧数，这是实际驻留内存的近似值。
+        let frames = max(image.images?.count ?? 1, 1)
+        let bytes = image.size.width * image.size.height * 4 * CGFloat(frames)
+        cache.setObject(image, forKey: url.absoluteString as NSString, cost: max(Int(bytes), 1))
     }
 }
 
@@ -267,7 +273,7 @@ struct InlineImageContainer: UIViewRepresentable {
                         }
                         return
                     }
-                    InlineImageCache.shared.store(image, dataCount: data.count, for: target)
+                    InlineImageCache.shared.store(image, for: target)
                     Task { @MainActor [weak self] in
                         guard let self, gen == self.generation, let view = self.targetView else { return }
                         self.apply(image, into: view)
@@ -356,7 +362,7 @@ struct InlineImageContainer: UIViewRepresentable {
                     Task { @MainActor [weak self] in self?.loader.markAnimationFailed() }
                     return
                 }
-                InlineImageCache.shared.store(image, dataCount: data.count, for: animated)
+                InlineImageCache.shared.store(image, for: animated)
                 Task { @MainActor [weak self] in
                     guard let self, gen == self.generation, let view = self.targetView else { return }
                     self.animatedApplied = true
@@ -434,27 +440,24 @@ struct InlineImageContainer: UIViewRepresentable {
     }
 }
 
-/// UIImageView 自带 intrinsicContentSize：按可用宽度与图片比例给出高度，
 /// 图片按原比例完整显示；GIF 的 mp4 叠在同一比例上静音循环播放。
+/// 高度完全由外层 SwiftUI `.aspectRatio` 决定，UIView 不再参与 intrinsic 计算，
+/// 避免滑动时 invalidateIntrinsicContentSize 触发 Auto Layout 反馈循环。
 final class FittingImageView: UIView {
     private let imageView = UIImageView()
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var loopObserver: NSObjectProtocol?
     private var sizeObservation: NSKeyValueObservation?
-    private var aspect: CGFloat = 0
     /// 视频真实尺寸到位后通知外层更新 SwiftUI 布局高度。
     var onSizeChange: ((CGSize) -> Void)?
 
     var image: UIImage? {
         didSet {
             stopVideo()
-            let size = image?.size ?? .zero
-            aspect = size.width > 0 ? size.height / size.width : 0
             imageView.image = image
             // 列表复用 / 从静态占位换成动画时，UIImageView 不总会自动起播。
             if (image?.images?.count ?? 0) > 1 { imageView.startAnimating() }
-            invalidateIntrinsicContentSize()
             setNeedsLayout()
         }
     }
@@ -496,12 +499,9 @@ final class FittingImageView: UIView {
             [weak self] item, _ in
             let size = item.presentationSize
             guard size.width > 0, size.height > 0 else { return }
+            // 高度由 SwiftUI 的 aspectRatio 控制，这里只通知尺寸变化。
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.aspect = size.height / size.width
-                self.invalidateIntrinsicContentSize()
-                self.setNeedsLayout()
-                self.onSizeChange?(size)
+                self?.onSizeChange?(size)
             }
         }
         player.play()
@@ -513,7 +513,9 @@ final class FittingImageView: UIView {
         }
         loopObserver = nil
         sizeObservation = nil
-        onSizeChange = nil
+        // 不能在这里清回调：applyVideo 先设置 onSizeChange 再调 playVideo，
+        // playVideo 内部的 stopVideo 会把刚设置的回调清掉，视频比例永远修正不了。
+        // 回调生命周期由 load() / dismantleUIView 负责。
         player?.pause()
         player = nil
         playerLayer?.removeFromSuperlayer()
@@ -524,12 +526,5 @@ final class FittingImageView: UIView {
         super.layoutSubviews()
         imageView.frame = bounds
         playerLayer?.frame = bounds
-        if bounds.width > 0 { invalidateIntrinsicContentSize() }
-    }
-
-    override var intrinsicContentSize: CGSize {
-        let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width - 32
-        guard aspect > 0 else { return CGSize(width: width, height: 220) }
-        return CGSize(width: UIView.noIntrinsicMetric, height: width * aspect)
     }
 }

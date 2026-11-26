@@ -56,15 +56,16 @@ final class CachedImageLoader: ObservableObject {
     func load(_ url: URL?) async {
         image = nil
         guard let url else { return }
-        // 先读缓存（同步命中），没有再发网络请求。
         let request = URLRequest(url: url)
-        if let cached = ImageCache.shared.cachedResponse(for: request),
-           let cachedImage = UIImage(data: cached.data) {
-            image = cachedImage
-            return
-        }
-        guard let (data, response) = try? await ImageCache.session.data(from: url),
-              let loaded = UIImage(data: data) else { return }
+        // URLCache 查询 + 解码放到后台，滑动列表时避免主线程掉帧。
+        let cached = await Task.detached(priority: .userInitiated) {
+            ImageCache.shared.cachedResponse(for: request).flatMap { UIImage(data: $0.data) }
+        }.value
+        if let cached { image = cached; return }
+        // 网络请求留在当前 task：列表复用时 `.task(id:)` 的取消能真正中断下载，
+        // 不能用 detached task 包住，否则旧请求继续跑还会把旧图写回复用的行。
+        guard let (data, response) = try? await ImageCache.session.data(from: url) else { return }
+        let loaded = await Task.detached(priority: .userInitiated) { UIImage(data: data) }.value
         ImageCache.shared.storeCachedResponse(
             CachedURLResponse(response: response, data: data), for: request
         )
