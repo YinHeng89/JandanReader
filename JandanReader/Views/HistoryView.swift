@@ -2,8 +2,8 @@ import SwiftUI
 
 struct HistoryView: View {
     @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var router: FeedRouter
     @Environment(\.dismiss) private var dismiss
-    let onOpen: (URL) -> Void
 
     var body: some View {
         NavigationStack {
@@ -12,14 +12,18 @@ struct HistoryView: View {
                     ContentUnavailableView(
                         "还没有阅读记录",
                         systemImage: "clock.arrow.circlepath",
-                        description: Text("打开任意文章后会自动记录在这里")
+                        description: Text("打开任意内容后会自动记录在这里")
                     )
                 } else {
                     List {
                         ForEach(history.items) { item in
                             Button {
-                                guard let url = URL(string: item.url) else { return }
-                                onOpen(url)
+                                router.openArticle(
+                                    id: item.postID,
+                                    title: item.title,
+                                    kind: item.kind,
+                                    in: selectedChannel(for: item.kind)
+                                )
                                 dismiss()
                             } label: {
                                 VStack(alignment: .leading, spacing: 5) {
@@ -52,5 +56,9 @@ struct HistoryView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func selectedChannel(for kind: String) -> Channel {
+        kind == "comment" ? .withID("pic") : .home
     }
 }
