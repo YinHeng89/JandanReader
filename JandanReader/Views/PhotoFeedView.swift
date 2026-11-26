@@ -419,6 +419,7 @@ private struct InlineCommentsView: View {
             TextField("发表吐槽…", text: $compose.draft)
                 .textFieldStyle(.roundedBorder)
                 .disabled(compose.isSending)
+                .onSubmit { Keyboard.dismiss() }
             Button {
                 Task { await submit() }
             } label: {
@@ -434,10 +435,12 @@ private struct InlineCommentsView: View {
                     || compose.isSending
             )
         }
+        .dismissKeyboardToolbar()
     }
 
     private func submit() async {
         guard auth.isLoggedIn else {
+            Keyboard.dismiss()
             store.showToast("请先登录煎蛋账号")
             return
         }
@@ -447,7 +450,10 @@ private struct InlineCommentsView: View {
             itemID: item.id, commentID: item.id,
             content: compose.draft, author: auth.user?.nickname ?? "匿名"
         )
-        if ok { compose.draft = "" }
+        if ok {
+            compose.draft = ""
+            Keyboard.dismiss()
+        }
     }
 }
 

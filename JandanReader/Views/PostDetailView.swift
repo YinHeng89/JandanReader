@@ -56,6 +56,7 @@ struct PostDetailView: View {
             TextField("发表吐槽…", text: $compose.draft)
                 .textFieldStyle(.roundedBorder)
                 .disabled(compose.isSending)
+                .onSubmit { Keyboard.dismiss() }
             Button {
                 Task { await submit() }
             } label: {
@@ -72,17 +73,22 @@ struct PostDetailView: View {
             )
         }
         .padding(12)
+        .dismissKeyboardToolbar()
     }
 
     private func submit() async {
         guard auth.isLoggedIn else {
+            Keyboard.dismiss()
             store.showToast("请先登录煎蛋账号")
             return
         }
         compose.isSending = true
         defer { compose.isSending = false }
         let ok = await store.submit(content: compose.draft, author: auth.user?.nickname ?? "匿名")
-        if ok { compose.draft = "" }
+        if ok {
+            compose.draft = ""
+            Keyboard.dismiss()
+        }
     }
 
     private var visibleComments: [JDComment] {

@@ -21,25 +21,27 @@ struct UserProfileView: View {
     private var displayName: String { store.profile?.nickname ?? nickname }
 
     var body: some View {
-        Group {
-            if store.isLoading {
-                ProgressView("加载中…").tint(Color.accentColor)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        header
-                        if !store.badges.isEmpty { badgesSection }
-                        if !store.comments.isEmpty { listSection("评论", store.comments) }
-                        if !store.tucaos.isEmpty { listSection("吐槽", store.tucaos) }
-                        if store.comments.isEmpty && store.tucaos.isEmpty {
-                            Text("暂无公开内容")
-                                .font(.caption).foregroundStyle(.tertiary)
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                if store.isLoading {
+                    HStack {
+                        ProgressView().tint(Color.accentColor)
+                        Text("加载中…").font(.caption).foregroundStyle(.secondary)
                     }
-                    .padding(16)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                } else {
+                    if !store.badges.isEmpty { badgesSection }
+                    if !store.comments.isEmpty { listSection("评论", store.comments) }
+                    if !store.tucaos.isEmpty { listSection("吐槽", store.tucaos) }
+                    if store.comments.isEmpty && store.tucaos.isEmpty {
+                        Text("暂无公开内容")
+                            .font(.caption).foregroundStyle(.tertiary)
+                    }
                 }
             }
+            .padding(16)
         }
         .navigationTitle("个人主页")
         .navigationBarTitleDisplayMode(.inline)
@@ -130,11 +132,9 @@ struct UserProfileView: View {
                                     .font(.caption2).foregroundStyle(.tertiary)
                             }
                         }
-                        Text(JDHTML.plain(comment.content ?? ""))
-                            .font(.system(size: 13 * settings.fontScale / 100))
-                            .foregroundStyle(.primary)
-                            .lineLimit(4)
-                            .multilineTextAlignment(.leading)
+                        // 无聊图正文常是纯 <img> 标签，必须走 RichText 才能显示图片；
+                        // 用 plain 会把标签剥掉只剩空文字。
+                        RichText(html: comment.content ?? "", baseFont: 0.9)
                         HStack(spacing: 12) {
                             Label("\(comment.vote_positive ?? 0)", systemImage: "hand.thumbsup")
                             Label("\(comment.vote_negative ?? 0)", systemImage: "hand.thumbsdown")

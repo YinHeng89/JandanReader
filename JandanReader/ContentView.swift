@@ -28,14 +28,9 @@ struct ContentView: View {
                 Channel.all.forEach { router.ensure($0) }
                 ui.selected = .channel(Channel.withID(settings.lastChannelID))
                 PrefsStore.shared.configure(settings: settings, banned: banned, auth: auth)
-                if auth.isLoggedIn {
-                    NoticeStore.shared.startPolling()
-                    Task {
-                        await NoticeStore.shared.refreshUnread()
-                        await FavoriteStore.shared.refresh()
-                        await PrefsStore.shared.pull()
-                    }
-                }
+                // 登录态存在 Cookie 里，但 user 需要请求 /member/get_info 才能拿到。
+                // 不在启动时 refresh 的话，重启后 auth.isLoggedIn 一直是 false。
+                Task { await auth.refresh() }
             }
             .onChange(of: ui.selected) { _, newValue in
                 if case .channel(let channel) = newValue {

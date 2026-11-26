@@ -45,6 +45,25 @@ extension View {
     func toast(message: Binding<String?>) -> some View {
         modifier(ToastModifier(message: message))
     }
+
+    /// 输入框键盘上方加「完成」按钮，保证任何情况下都能手动收起键盘。
+    func dismissKeyboardToolbar() -> some View {
+        self.toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") { Keyboard.dismiss() }
+            }
+        }
+    }
+}
+
+/// 统一收起键盘（SwiftUI 没有可靠的 FocusState 跨页面收起方式）。
+enum Keyboard {
+    static func dismiss() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+    }
 }
 
 /// 「有新内容」浮层：顶部胶囊，点击后刷新，不自动打断阅读。

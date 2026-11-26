@@ -10,8 +10,10 @@ final class AuthStore: ObservableObject {
     @Published private(set) var isLoggingIn = false
     @Published private(set) var message: String?
 
-    private(set) var captcha: JDCaptcha?
-    private var captchaCookie: HTTPCookie?
+    /// 必须 @Published：否则 loadCaptcha 异步赋值后 LoginView 不会重绘，验证码区域始终空白。
+    @Published private(set) var captcha: JDCaptcha?
+    /// 图选验证码是否已通过。站点登录前必须先 verify，否则 /member/login 会被拒。
+    @Published private(set) var captchaVerified = false
 
     func refresh(force: Bool = false) async {
         if user != nil && !force { return }
@@ -31,6 +33,7 @@ final class AuthStore: ObservableObject {
     func loadCaptcha() async {
         message = nil
         captcha = nil
+        captchaVerified = false
         do {
             let result = try await JDAPI.get(
                 "/api/captcha/challenge",
@@ -50,6 +53,7 @@ final class AuthStore: ObservableObject {
                 "x": String(format: "%.4f", x),
                 "y": String(format: "%.4f", y),
             ])
+            captchaVerified = true
             return true
         } catch {
             message = error.localizedDescription
@@ -64,6 +68,10 @@ final class AuthStore: ObservableObject {
     func login(username: String, password: String) async -> Bool {
         guard !username.isEmpty, !password.isEmpty else {
             message = "请输入用户名和密码"
+            return false
+        }
+        guard captchaVerified else {
+            message = "请先点击验证码图片完成验证"
             return false
         }
         isLoggingIn = true

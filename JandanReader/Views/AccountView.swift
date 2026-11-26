@@ -72,6 +72,33 @@ struct LoginView: View {
                     .foregroundStyle(Color.accentColor)
                     .padding(.top, 24)
 
+                // 微信扫码登录入口：直接打开扫码页，无需输入验证码和密码。
+                Button {
+                    form.showWeChatLogin = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "message.fill")
+                        Text("微信扫码登录")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .padding(.horizontal)
+                .sheet(isPresented: $form.showWeChatLogin) {
+                    WeChatLoginView()
+                        .environmentObject(auth)
+                }
+
+                HStack(spacing: 10) {
+                    Rectangle().frame(height: 1).foregroundStyle(.quaternary)
+                    Text("或使用账号密码").font(.caption2).foregroundStyle(.tertiary)
+                    Rectangle().frame(height: 1).foregroundStyle(.quaternary)
+                }
+                .padding(.horizontal)
+
                 VStack(spacing: 12) {
                     TextField("用户名", text: $form.username)
                         .textFieldStyle(.roundedBorder)
@@ -84,7 +111,9 @@ struct LoginView: View {
 
                 if let captcha = auth.captcha {
                     VStack(spacing: 8) {
-                        Text(captcha.prompt ?? "请点击图片中的目标").font(.caption)
+                        Text(auth.captchaVerified ? "验证通过，请登录" : (captcha.prompt ?? "请点击图片中的目标"))
+                            .font(.caption)
+                            .foregroundStyle(auth.captchaVerified ? Color.green : Color.secondary)
                         CaptchaView(imageBase64: captcha.image ?? "") { point in
                             await auth.verifyCaptcha(x: point.x, y: point.y)
                         }
@@ -137,6 +166,7 @@ struct LoginView: View {
 final class LoginFormState: ObservableObject {
     @Published var username = ""
     @Published var password = ""
+    @Published var showWeChatLogin = false
 }
 
 /// 图选验证码：显示 base64 图片，点击坐标归一化后交给验证接口。
@@ -182,10 +212,15 @@ final class CaptchaImageState: ObservableObject {
     func decode(_ base64: String) {
         guard base64 != lastBase64, !base64.isEmpty else { return }
         lastBase64 = base64
-        let clean = base64
-            .replacingOccurrences(of: "data:image/", with: "")
-            .replacingOccurrences(of: ";base64,", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // data:image/png;base64,xxxx → 只取第一个逗号后的载荷。
+        // 不能按 "data:image/" 和 ";base64," 分别删除，否则会残留 "png" 前缀导致解码失败。
+        let payload: String
+        if let comma = base64.firstIndex(of: ",") {
+            payload = String(base64[base64.index(after: comma)...])
+        } else {
+            payload = base64
+        }
+        let clean = payload.trimmingCharacters(in: .whitespacesAndNewlines)
         if let data = Data(base64Encoded: clean) {
             image = UIImage(data: data)
         }
