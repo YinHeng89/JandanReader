@@ -120,7 +120,15 @@ final class FeedStore: ObservableObject {
     /// 图片流条目 id 就是评论 id，可直接投 OO / XX。
     func vote(item: JDFeedItem, like: Bool) async {
         guard item.kind == .comment, voteKind(item.id) == nil,
-              let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+              items.contains(where: { $0.id == item.id }) else { return }
+        // 请求成功后再改数字与高亮：失败时界面保持原样，不闪动也不需要刷新回滚。
+        do {
+            try await JDAPI.vote(commentID: item.id, like: like)
+        } catch {
+            showToast(error.localizedDescription)
+            return
+        }
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         let original = items[index]
         let delta = like ? (1, 0) : (0, 1)
         let changed = JDFeedItem(
@@ -134,43 +142,26 @@ final class FeedStore: ObservableObject {
         )
         items[index] = changed
         votedKinds[item.id] = like
-        do {
-            try await JDAPI.vote(commentID: item.id, like: like)
-        } catch {
-            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
-                // 服务端已有这一票：保留乐观票数并标记已投，避免误判为失败。
-                showToast("您已经投过票了")
-            } else {
-                items[index] = original
-                votedKinds.removeValue(forKey: item.id)
-                showToast(error.localizedDescription)
-            }
-        }
     }
 
     /// 行内吐槽投票：吐槽列表里的 comment_ID 同样走 /api/comment/vote。
     func voteInline(commentID: Int, like: Bool) async {
-        guard voteKind(commentID) == nil,
-              let (itemID, index) = inlineComments.first(where: { $0.value.contains { $0.id == commentID } })
-                .map({ ($0.key, $0.value.firstIndex { $0.id == commentID }!) }) else { return }
-        let original = inlineComments[itemID]![index]
-        let changed = original.withVote(
-            positive: like ? (original.vote_positive ?? 0) + 1 : original.vote_positive,
-            negative: like ? original.vote_negative : (original.vote_negative ?? 0) + 1
-        )
-        inlineComments[itemID]![index] = changed
-        votedKinds[commentID] = like
+        guard voteKind(commentID) == nil else { return }
         do {
             try await JDAPI.vote(commentID: commentID, like: like)
         } catch {
-            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
-                showToast("您已经投过票了")
-            } else {
-                inlineComments[itemID]![index] = original
-                votedKinds.removeValue(forKey: commentID)
-                showToast(error.localizedDescription)
-            }
+            showToast(error.localizedDescription)
+            return
         }
+        guard let (itemID, index) = inlineComments.first(where: { $0.value.contains { $0.id == commentID } })
+                .map({ ($0.key, $0.value.firstIndex { $0.id == commentID }!) }),
+              let comment = inlineComments[itemID]?[index] else { return }
+        let changed = comment.withVote(
+            positive: like ? (comment.vote_positive ?? 0) + 1 : comment.vote_positive,
+            negative: like ? comment.vote_negative : (comment.vote_negative ?? 0) + 1
+        )
+        inlineComments[itemID]![index] = changed
+        votedKinds[commentID] = like
     }
 
     // MARK: 图片流评论原地展开

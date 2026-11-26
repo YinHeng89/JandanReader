@@ -84,6 +84,19 @@ final class DetailStore: ObservableObject {
     private enum VoteList { case comments, tucaos }
 
     private func applyVote(commentID: Int, like: Bool, list: VoteList, index: Int) async {
+        // 请求成功后再改数字与高亮，失败时界面保持原样。
+        do {
+            try await JDAPI.vote(commentID: commentID, like: like)
+        } catch {
+            showToast(error.localizedDescription)
+            return
+        }
+        let isValidIndex: Bool
+        switch list {
+        case .comments: isValidIndex = comments.indices.contains(index)
+        case .tucaos: isValidIndex = tucaos.indices.contains(index)
+        }
+        guard isValidIndex else { return }
         let original: JDComment
         switch list {
         case .comments: original = comments[index]
@@ -97,21 +110,6 @@ final class DetailStore: ObservableObject {
         case .tucaos: tucaos[index] = changed
         }
         votedKinds[commentID] = like
-        do {
-            try await JDAPI.vote(commentID: commentID, like: like)
-        } catch {
-            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
-                // 服务端已有这一票：保留乐观票数并标记已投。
-                showToast("您已经投过票了")
-            } else {
-                switch list {
-                case .comments: comments[index] = original
-                case .tucaos: tucaos[index] = original
-                }
-                votedKinds.removeValue(forKey: commentID)
-                showToast(error.localizedDescription)
-            }
-        }
     }
 }
 
