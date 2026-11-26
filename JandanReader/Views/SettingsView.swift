@@ -1,30 +1,56 @@
 import SwiftUI
 
+/// sheet 有独立环境，父级的 preferredColorScheme 不会实时下发；这里单独绑定并稍作延迟。
+@MainActor
+private final class SettingsTheme: ObservableObject {
+    @Published var scheme: ColorScheme?
+    @Published var showHistory = false
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var history: HistoryStore
+    @EnvironmentObject private var router: FeedRouter
+    @EnvironmentObject private var banned: BannedStore
     @Environment(\.dismiss) private var dismiss
-
-    @StateObject private var ui = SettingsViewState()
-    let onOpen: (URL) -> Void
-
-    private func open(_ path: String) {
-        guard let url = URL(string: "https://jandan.net" + path) else { return }
-        // 统一走外壳的 URL 分发（WebRouter.open 会判定功能页 → 独立页）。
-        // 先 dismiss，等 sheet 完全消失再触发，避免与 fullScreenCover 抢 presentation。
-        ui.pendingURL = url
-        dismiss()
-    }
+    @StateObject private var theme = SettingsTheme()
+    /// 作为底部 Tab 时常驻，不需要「完成」关闭按钮。
+    var showsDoneButton: Bool = true
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    Button {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            router.openAccount()
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 26))
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("个人中心").font(.system(size: 15, weight: .semibold))
+                                Text("登录、账户信息与订阅").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    Text("账户")
+                }
+
+                Section {
                     Toggle(isOn: $settings.darkMode) {
                         Label("夜间模式", systemImage: "moon.fill")
                     }
                     Toggle(isOn: $settings.cleanMode) {
-                        Label("纯净阅读", systemImage: "text.alignleft")
+                        Label("显示缩略图", systemImage: "photo")
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -40,60 +66,48 @@ struct SettingsView: View {
                 } header: {
                     Text("外观")
                 } footer: {
-                    Text("纯净阅读会隐藏网页自带的导航栏、侧栏与广告位，频道切换交给原生顶部标签。关闭即可查看完整网页。")
+                    Text("显示缩略图加载 600px 小图，关闭后加载原图。")
                 }
 
                 Section {
-                    Button {
-                        open("/new/member")
+                    NavigationLink {
+                        BannedUsersView()
                     } label: {
-                        Label("用户中心", systemImage: "person.crop.circle")
-                    }
-                    Button {
-                        open("/new/member/message")
-                    } label: {
-                        Label("消息通知", systemImage: "envelope")
+                        HStack {
+                            Label("屏蔽的用户", systemImage: "hand.raised.slash")
+                            Spacer()
+                            Text("\(banned.entries.count) 人")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } header: {
-                    Text("账户")
+                    Text("内容")
+                } footer: {
+                    Text("屏蔽后该作者的内容与评论将不再显示，仅保存在本机。")
                 }
 
                 Section {
-                    HStack {
-                        Label("阅读历史", systemImage: "clock.arrow.circlepath")
-                        Spacer()
-                        Text("\(history.items.count) 条")
-                            .foregroundStyle(.secondary)
+                    Button { theme.showHistory = true } label: {
+                        HStack {
+                            Label("阅读历史", systemImage: "clock.arrow.circlepath")
+                            Spacer()
+                            Text("\(history.items.count) 条")
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     Button(role: .destructive) {
                         history.clear()
                     } label: {
                         Label("清空阅读历史", systemImage: "trash")
                     }
                     .disabled(history.items.isEmpty)
-                    Button {
-                        Task {
-                            ui.clearingCache = true
-                            await WebCache.clear()
-                            ui.clearingCache = false
-                            ui.cacheCleared = true
-                        }
-                    } label: {
-                        HStack {
-                            Label("清除网页缓存", systemImage: "xmark.circle")
-                            if ui.clearingCache { Spacer(); ProgressView() }
-                            if ui.cacheCleared && !ui.clearingCache {
-                                Spacer()
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            }
-                        }
-                    }
-                    .disabled(ui.clearingCache)
                 } header: {
                     Text("数据")
                 } footer: {
-                    Text("仅清除图片与页面缓存，不会退出登录。")
+                    Text("阅读历史只保存在本机，不会上传。")
                 }
 
                 Section {
@@ -102,7 +116,7 @@ struct SettingsView: View {
                         Spacer()
                         Text("1.0.0").foregroundStyle(.secondary)
                     }
-                    Label("数据来源 jandan.net", systemImage: "link")
+                    Label("数据来源 jandan.net REST API", systemImage: "link")
                         .foregroundStyle(.secondary)
                     Text("非官方客户端，内容版权归煎蛋网所有。仅供个人使用。")
                         .font(.footnote)
@@ -114,15 +128,25 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { dismiss() }
+                    }
                 }
             }
+            .sheet(isPresented: $theme.showHistory) {
+                HistoryView()
+                    .environmentObject(history)
+                    .environmentObject(router)
+            }
         }
-        .onDisappear {
-            guard let url = ui.pendingURL else { return }
-            ui.pendingURL = nil
-            onOpen(url)
+        .onAppear { theme.scheme = settings.darkMode ? .dark : .light }
+        .onChange(of: settings.darkMode) { _, dark in
+            // 稍延迟让开关状态先提交，随后再切换 sheet 环境。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                theme.scheme = dark ? .dark : .light
+            }
         }
+        .preferredColorScheme(theme.scheme)
     }
 }
