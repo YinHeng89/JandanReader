@@ -22,6 +22,10 @@ final class TabTapController: NSObject {
     private var lastFired: TimeInterval = 0
     private weak var installedBar: UITabBar?
 
+    /// 由外层提供当前选中的 tab 序号。不能依赖 UITabBar.selectedItem：
+    /// iOS 18+ 的 SwiftUI TabView 不一定给 items/selectedItem 赋值。
+    var currentTabIndex: (() -> Int)?
+
     /// 幂等安装；host VC 的布局回调会多次调用，避免重复加手势。
     func install(on bar: UITabBar) {
         guard installedBar !== bar else { return }
@@ -33,18 +37,18 @@ final class TabTapController: NSObject {
     }
 
     private func index(of point: CGPoint, in bar: UITabBar) -> Int? {
-        guard let count = bar.items?.count, count > 0 else { return nil }
         // UITabBarButton 是系统私有视图，用 accessibilityTraits 识别，不直接引用私有类。
         let buttons = bar.subviews
             .filter { $0.accessibilityTraits.contains(.button) && $0.frame.width > 20 }
             .sorted { $0.frame.minX < $1.frame.minX }
-        let index: Int
+        // SwiftUI TabView 的 items 可能为空；按钮数量才是可靠的 tab 数。
+        let count = max(buttons.count, bar.items?.count ?? 0)
+        guard count > 0 else { return nil }
         if let found = buttons.firstIndex(where: { $0.frame.contains(point) }) {
-            index = found
-        } else {
-            // 识别不到按钮视图时按等宽分区兜底（4 个 tab 均分）。
-            index = Int(point.x / max(bar.bounds.width / CGFloat(count), 1))
+            return found
         }
+        // 识别不到按钮视图时按等宽分区兜底（4 个 tab 均分）。
+        let index = Int(point.x / max(bar.bounds.width / CGFloat(count), 1))
         return (0..<count).contains(index) ? index : nil
     }
 
@@ -77,8 +81,7 @@ extension TabTapController: UIGestureRecognizerDelegate {
                            shouldReceive touch: UITouch) -> Bool {
         guard let bar = gestureRecognizer.view as? UITabBar,
               let idx = index(of: touch.location(in: bar), in: bar),
-              let selected = bar.selectedItem,
-              let selectedIndex = bar.items?.firstIndex(of: selected) else { return false }
+              let selectedIndex = currentTabIndex?() else { return false }
         // 只接管「重复点当前 tab」；切其它 tab 完全交给系统，避免打断导航栈管理。
         return idx == selectedIndex
     }
@@ -154,6 +157,16 @@ struct ContentView: View {
             .onAppear {
                 guard !ui.didConfigure else { return }
                 ui.didConfigure = true
+                let state = ui
+                ui.tabTap.currentTabIndex = { [weak state] in
+                    guard let state else { return -1 }
+                    switch state.selected {
+                    case .channel(let channel):
+                        return Channel.all.firstIndex(of: channel) ?? -1
+                    case .settings:
+                        return Channel.all.count
+                    }
+                }
                 router.configure(
                     history: history,
                     openAccount: { ui.showAccount = true },
