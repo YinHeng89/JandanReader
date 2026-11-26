@@ -87,13 +87,14 @@ struct PhotoFeedView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
                 guard note.object as? String == store.channel.id else { return }
-                // 不插占位行，直接滚到第一条内容（避免顶部出现分隔线）。
-                withAnimation(.easeOut(duration: 0.25)) {
+                Task { @MainActor in
+                    // 先刷新再置顶：reload 会重建列表，先滚动会被冲掉。
+                    await store.reload()
+                    // 不插占位行，直接滚到第一条内容（避免顶部出现分隔线）。
                     if let target = visibleItems.first?.id {
                         proxy.scrollTo(target, anchor: .top)
                     }
                 }
-                Task { await store.reload() }
             }
         }
     }

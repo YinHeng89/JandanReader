@@ -6,12 +6,12 @@ extension Notification.Name {
     static let jdTabDoubleTap = Notification.Name("jdTabDoubleTap")
 }
 
-/// 拦截底部 Tab 点击：重复点当前 tab 时单击不做任何事（系统默认会 pop 到根），
-/// 双击则发通知让列表置顶并刷新。切换其它 tab 保持系统默认行为。
+/// 双击当前底部 Tab：置顶 + 刷新。
 ///
-/// 关键：**不能**替换 SwiftUI TabView 内部的 UITabBarController.delegate——
-/// 它会破坏 SwiftUI 对各 tab 导航栈的管理，表现为「首页点文章跳到无聊图」。
-/// 改为只在 UITabBar 上挂手势：重复点当前 tab 时吞掉触摸阻止 pop，其它 tab 不接管。
+/// 三次返工后的定论：
+/// 1. 不能替换 SwiftUI TabView 内部的 UITabBarController.delegate——会串各 tab 导航栈。
+/// 2. 不能依赖 UITabBar.items / selectedItem / 按钮子视图——iOS 18+ SwiftUI 下可能为空。
+/// 3. 手势直接挂 UIWindow，按屏幕底部区域 + 等宽分区判断 tab 序号，不碰任何 UIKit 私有结构。
 final class TabTapController: NSObject {
     private struct TapRecord {
         let index: Int
@@ -20,45 +20,42 @@ final class TabTapController: NSObject {
 
     private var lastTap: TapRecord?
     private var lastFired: TimeInterval = 0
-    private weak var installedBar: UITabBar?
+    private weak var installedWindow: UIWindow?
 
-    /// 由外层提供当前选中的 tab 序号。不能依赖 UITabBar.selectedItem：
-    /// iOS 18+ 的 SwiftUI TabView 不一定给 items/selectedItem 赋值。
+    /// 当前选中的 tab 序号，由外层提供。
     var currentTabIndex: (() -> Int)?
+    /// tab 总数 = 频道数 + 设置页。
+    var tabCount: Int = 0
 
-    /// 幂等安装；host VC 的布局回调会多次调用，避免重复加手势。
-    func install(on bar: UITabBar) {
-        guard installedBar !== bar else { return }
-        installedBar = bar
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tabBarTapped(_:)))
+    /// 手势挂在 window：无论 tab bar 内部是什么结构，底部触摸都能收到。
+    func install(on window: UIWindow) {
+        guard installedWindow !== window else { return }
+        installedWindow = window
+        let tap = UITapGestureRecognizer(target: self, action: #selector(windowTapped(_:)))
+        // 吞掉触摸：重复点当前 tab 时阻止系统 pop 到根；
+        // 切其它 tab 时 shouldReceive 返回 false，完全交给系统。
         tap.cancelsTouchesInView = true
         tap.delegate = self
-        bar.addGestureRecognizer(tap)
+        window.addGestureRecognizer(tap)
     }
 
-    private func index(of point: CGPoint, in bar: UITabBar) -> Int? {
-        // UITabBarButton 是系统私有视图，用 accessibilityTraits 识别，不直接引用私有类。
-        let buttons = bar.subviews
-            .filter { $0.accessibilityTraits.contains(.button) && $0.frame.width > 20 }
-            .sorted { $0.frame.minX < $1.frame.minX }
-        // SwiftUI TabView 的 items 可能为空；按钮数量才是可靠的 tab 数。
-        let count = max(buttons.count, bar.items?.count ?? 0)
-        guard count > 0 else { return nil }
-        if let found = buttons.firstIndex(where: { $0.frame.contains(point) }) {
-            return found
-        }
-        // 识别不到按钮视图时按等宽分区兜底（4 个 tab 均分）。
-        let index = Int(point.x / max(bar.bounds.width / CGFloat(count), 1))
-        return (0..<count).contains(index) ? index : nil
-    }
-
-    @objc private func tabBarTapped(_ gesture: UITapGestureRecognizer) {
-        guard let bar = gesture.view as? UITabBar,
-              let idx = index(of: gesture.location(in: bar), in: bar) else { return }
+    @objc private func windowTapped(_ gesture: UITapGestureRecognizer) {
+        guard let window = installedWindow,
+              let idx = tabIndex(at: gesture.location(in: window), in: window) else { return }
         noteTap(idx)
     }
 
-    /// 同一个 tab 在 0.8 秒内第二次触摸视为双击。
+    /// tab bar 位于屏幕底部；高度放宽以覆盖不同机型的 safe area 和液态玻璃样式。
+    private func tabIndex(at point: CGPoint, in window: UIWindow) -> Int? {
+        guard tabCount > 0 else { return nil }
+        let barHeight: CGFloat = 96
+        guard point.y >= window.bounds.height - barHeight else { return nil }
+        let each = window.bounds.width / CGFloat(tabCount)
+        let idx = Int(point.x / max(each, 1))
+        return (0..<tabCount).contains(idx) ? idx : nil
+    }
+
+    /// 当前 tab 在 0.8 秒内第二次点击视为双击；0.6 秒内只发一次通知。
     private func noteTap(_ index: Int) {
         let now = Date().timeIntervalSince1970
         if let previous = lastTap, previous.index == index, now - previous.time < 0.8 {
@@ -79,48 +76,11 @@ final class TabTapController: NSObject {
 extension TabTapController: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldReceive touch: UITouch) -> Bool {
-        guard let bar = gestureRecognizer.view as? UITabBar,
-              let idx = index(of: touch.location(in: bar), in: bar),
-              let selectedIndex = currentTabIndex?() else { return false }
-        // 只接管「重复点当前 tab」；切其它 tab 完全交给系统，避免打断导航栈管理。
-        return idx == selectedIndex
-    }
-}
-
-/// 把手势挂到 SwiftUI TabView 底层的 UITabBar 上（不碰 delegate）。
-struct TabDelegateHost: UIViewControllerRepresentable {
-    let controller: TabTapController
-
-    func makeUIViewController(context: Context) -> TabDelegateHostVC {
-        TabDelegateHostVC(controller: controller)
-    }
-
-    func updateUIViewController(_ uiViewController: TabDelegateHostVC, context: Context) {}
-}
-
-final class TabDelegateHostVC: UIViewController {
-    let controller: TabTapController
-
-    init(controller: TabTapController) {
-        self.controller = controller
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        attach()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        attach()
-    }
-
-    private func attach() {
-        guard let tabBarController else { return }
-        controller.install(on: tabBarController.tabBar)
+        guard let window = installedWindow,
+              let idx = tabIndex(at: touch.location(in: window), in: window),
+              let selected = currentTabIndex?() else { return false }
+        // 只接管当前 tab；切其它 tab 交给系统，保持导航栈正常。
+        return idx == selected
     }
 }
 
@@ -134,20 +94,13 @@ struct ContentView: View {
 
     @StateObject private var ui = ContentViewState()
 
-    /// 兜底：host VC 的 appear 时机在某些 iOS 版本上不稳定，从 keyWindow 再挂一次（幂等）。
+    /// 直接挂到 keyWindow，不依赖 UITabBar 的内部结构。
     private static func attachTabTap(controller: TabTapController) {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow }
-        func findTabBar(in vc: UIViewController?) -> UITabBarController? {
-            guard let vc else { return nil }
-            if let tab = vc as? UITabBarController { return tab }
-            for child in vc.children {
-                if let tab = findTabBar(in: child) { return tab }
-            }
-            return nil
-        }
-        guard let tab = findTabBar(in: window?.rootViewController) else { return }
-        controller.install(on: tab.tabBar)
+        let windows = scenes.flatMap { $0.windows }
+        // isKeyWindow 在多 scene 时可能为 false，取不到就退回第一个 window（install 幂等）。
+        guard let window = windows.first(where: { $0.isKeyWindow }) ?? windows.first else { return }
+        controller.install(on: window)
     }
 
     var body: some View {
@@ -158,6 +111,7 @@ struct ContentView: View {
                 guard !ui.didConfigure else { return }
                 ui.didConfigure = true
                 let state = ui
+                ui.tabTap.tabCount = Channel.all.count + 1
                 ui.tabTap.currentTabIndex = { [weak state] in
                     guard let state else { return -1 }
                     switch state.selected {
@@ -185,6 +139,8 @@ struct ContentView: View {
                 }
             }
             .onChange(of: ui.selected) { _, newValue in
+                // 每次切 tab 都再挂一次（幂等），兜住启动延迟挂载错过 keyWindow 的情况。
+                Self.attachTabTap(controller: ui.tabTap)
                 if case .channel(let channel) = newValue {
                     settings.lastChannelID = channel.id
                 }
@@ -219,12 +175,10 @@ struct ContentView: View {
                 ForEach(Channel.all) { channel in
                     Tab(channel.title, systemImage: channel.symbol, value: AppTab.channel(channel)) {
                         navigationContent(for: channel)
-                            .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                     }
                 }
                 Tab("设置", systemImage: "gearshape.fill", value: AppTab.settings) {
                     settingsTab
-                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                 }
                 .badge(notices.unread > 0 ? Text("\(notices.unread)") : nil)
             }
@@ -232,14 +186,12 @@ struct ContentView: View {
             TabView(selection: $ui.selected) {
                 ForEach(Channel.all) { channel in
                     navigationContent(for: channel)
-                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                         .tabItem {
                             Label(channel.title, systemImage: channel.symbol)
                         }
                         .tag(AppTab.channel(channel))
                 }
                     settingsTab
-                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                     .tabItem {
                         Label("设置", systemImage: "gearshape.fill")
                     }
