@@ -153,67 +153,88 @@ struct HomeFeedView: View {
     }
 }
 
-/// 首页单行：左侧大号分数 + 右侧标题 / 摘要 / 吐槽预览。
+/// 首页单行（方案 C 大图卡片）：标题 + 分数 / 宽幅图 / 摘要 / 吐槽预览。
 private struct HomeRow: View {
     let item: JDFeedItem
     @EnvironmentObject private var settings: AppSettings
 
+    private var thumbnailURL: URL? {
+        guard let raw = item.imageURL else { return nil }
+        let fixed = raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw
+        guard let url = URL(string: fixed) else { return nil }
+        // 大图卡片需要清晰版本：thumb180 → mw1024，非站点标准路径保持原样。
+        return JDHTML.displayURL(url, thumbnail: false)
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text("\(item.score)")
-                .font(.system(size: 34, weight: .light, design: .rounded))
-                .foregroundStyle(Color(.tertiaryLabel))
-                .frame(width: 36, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(item.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text("\(item.score)")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
 
-            // 站点缩略图（thumb180）前置，文字区在后。
-            HStack(alignment: .top, spacing: 10) {
-                if let raw = item.imageURL,
-                   let url = URL(string: raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw) {
-                    CachedAsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    }
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
+            if let url = thumbnailURL {
+                ArticleThumbnail(url: url)
+            }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
+            if !item.body.isEmpty {
+                Text(item.body)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(settings.cleanMode ? 3 : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                    if !item.body.isEmpty {
-                        Text(item.body)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(settings.cleanMode ? 3 : 2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let nickname = item.tucaoNickname, !nickname.isEmpty {
-                        HStack(alignment: .top, spacing: 6) {
-                            // 站点返回的 avatar_ref 是 /static/avatar/xx.png 相对路径，
-                            // 直接 URL(string:) 会得到相对 URL，AsyncImage 加载不到。
-                            if let avatar = item.tucaoAvatar,
-                               let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
-                                CachedAsyncImage(url: url) { image in
-                                    image.resizable().scaledToFill()
-                                }
-                                .frame(width: 18, height: 18)
-                                .clipShape(Circle())
-                            }
-                            Text("\(nickname): \(item.tucaoContent ?? "")")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(2)
+            if let nickname = item.tucaoNickname, !nickname.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    // 站点返回的 avatar_ref 是 /static/avatar/xx.png 相对路径，
+                    // 直接 URL(string:) 会得到相对 URL，AsyncImage 加载不到。
+                    if let avatar = item.tucaoAvatar,
+                       let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                        CachedAsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
                         }
+                        .frame(width: 18, height: 18)
+                        .clipShape(Circle())
                     }
+                    Text("\(nickname): \(item.tucaoContent ?? "")")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
                 }
             }
-            Spacer(minLength: 0)
         }
         .padding(.vertical, 8)
+    }
+}
+
+/// 文章卡片大图：固定高度占位 + scaledToFit 完整显示。
+/// 固定高度是必要的：异步加载后比例变化会让 List 行高重算，导致下一行盖到图片上。
+private struct ArticleThumbnail: View {
+    let url: URL
+    @StateObject private var loader = CachedImageLoader()
+
+    var body: some View {
+        Group {
+            if let ui = loader.image {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Color(.secondarySystemBackground)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .task(id: url.absoluteString) { await loader.load(url) }
     }
 }
 
