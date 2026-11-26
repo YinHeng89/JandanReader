@@ -9,44 +9,31 @@ extension Notification.Name {
 /// 拦截底部 Tab 点击：重复点当前 tab 时单击不做任何事（系统默认会 pop 到根），
 /// 双击则发通知让列表置顶并刷新。切换其它 tab 保持系统默认行为。
 ///
-/// iOS 18+ 的 SwiftUI TabView 重复点当前 tab 时不一定调用 UIKit 的 shouldSelect，
-/// 所以同时在 UITabBar 上挂一个不吞触摸的 tap 手势，直接按点击位置识别 tab。
-final class TabTapController: NSObject, UITabBarControllerDelegate {
+/// 关键：**不能**替换 SwiftUI TabView 内部的 UITabBarController.delegate——
+/// 它会破坏 SwiftUI 对各 tab 导航栈的管理，表现为「首页点文章跳到无聊图」。
+/// 改为只在 UITabBar 上挂手势：重复点当前 tab 时吞掉触摸阻止 pop，其它 tab 不接管。
+final class TabTapController: NSObject {
     private struct TapRecord {
         let index: Int
         let time: TimeInterval
     }
 
-    private var records: [String: TapRecord] = [:]
+    private var lastTap: TapRecord?
     private var lastFired: TimeInterval = 0
     private weak var installedBar: UITabBar?
-
-    func tabBarController(_ tabBarController: UITabBarController,
-                          shouldSelect viewController: UIViewController) -> Bool {
-        guard let vcs = tabBarController.viewControllers,
-              let idx = vcs.firstIndex(of: viewController) else { return true }
-        if tabBarController.selectedViewController === viewController {
-            noteTap(idx, source: "delegate")
-            return false
-        }
-        records.removeAll()
-        return true
-    }
 
     /// 幂等安装；host VC 的布局回调会多次调用，避免重复加手势。
     func install(on bar: UITabBar) {
         guard installedBar !== bar else { return }
         installedBar = bar
         let tap = UITapGestureRecognizer(target: self, action: #selector(tabBarTapped(_:)))
-        tap.cancelsTouchesInView = false
+        tap.cancelsTouchesInView = true
         tap.delegate = self
         bar.addGestureRecognizer(tap)
     }
 
-    @objc private func tabBarTapped(_ gesture: UITapGestureRecognizer) {
-        guard let bar = gesture.view as? UITabBar,
-              let count = bar.items?.count, count > 0 else { return }
-        let point = gesture.location(in: bar)
+    private func index(of point: CGPoint, in bar: UITabBar) -> Int? {
+        guard let count = bar.items?.count, count > 0 else { return nil }
         // UITabBarButton 是系统私有视图，用 accessibilityTraits 识别，不直接引用私有类。
         let buttons = bar.subviews
             .filter { $0.accessibilityTraits.contains(.button) && $0.frame.width > 20 }
@@ -58,16 +45,20 @@ final class TabTapController: NSObject, UITabBarControllerDelegate {
             // 识别不到按钮视图时按等宽分区兜底（4 个 tab 均分）。
             index = Int(point.x / max(bar.bounds.width / CGFloat(count), 1))
         }
-        guard (0..<count).contains(index) else { return }
-        noteTap(index, source: "gesture")
+        return (0..<count).contains(index) ? index : nil
     }
 
-    /// 同一个 tab 在 0.8 秒内第二次触摸视为双击；不同来源（delegate/手势）不会互相误判。
-    private func noteTap(_ index: Int, source: String) {
+    @objc private func tabBarTapped(_ gesture: UITapGestureRecognizer) {
+        guard let bar = gesture.view as? UITabBar,
+              let idx = index(of: gesture.location(in: bar), in: bar) else { return }
+        noteTap(idx)
+    }
+
+    /// 同一个 tab 在 0.8 秒内第二次触摸视为双击。
+    private func noteTap(_ index: Int) {
         let now = Date().timeIntervalSince1970
-        if let previous = records[source], previous.index == index, now - previous.time < 0.8 {
-            records[source] = nil
-            // 两个来源可能同时上报同一次双击，限制 0.6 秒内只发一次。
+        if let previous = lastTap, previous.index == index, now - previous.time < 0.8 {
+            lastTap = nil
             guard now - lastFired > 0.6 else { return }
             lastFired = now
             if index < Channel.all.count {
@@ -76,20 +67,24 @@ final class TabTapController: NSObject, UITabBarControllerDelegate {
                 )
             }
         } else {
-            records[source] = TapRecord(index: index, time: now)
+            lastTap = TapRecord(index: index, time: now)
         }
     }
 }
 
 extension TabTapController: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        // 不能吞掉 UITabBar 自己的触摸，否则 tab 切换会失效。
-        true
+                           shouldReceive touch: UITouch) -> Bool {
+        guard let bar = gestureRecognizer.view as? UITabBar,
+              let idx = index(of: touch.location(in: bar), in: bar),
+              let selected = bar.selectedItem,
+              let selectedIndex = bar.items?.firstIndex(of: selected) else { return false }
+        // 只接管「重复点当前 tab」；切其它 tab 完全交给系统，避免打断导航栈管理。
+        return idx == selectedIndex
     }
 }
 
-/// 把上面的 delegate / 手势挂到 SwiftUI TabView 底层的 UITabBarController 上。
+/// 把手势挂到 SwiftUI TabView 底层的 UITabBar 上（不碰 delegate）。
 struct TabDelegateHost: UIViewControllerRepresentable {
     let controller: TabTapController
 
@@ -122,7 +117,6 @@ final class TabDelegateHostVC: UIViewController {
 
     private func attach() {
         guard let tabBarController else { return }
-        tabBarController.delegate = controller
         controller.install(on: tabBarController.tabBar)
     }
 }
@@ -150,7 +144,6 @@ struct ContentView: View {
             return nil
         }
         guard let tab = findTabBar(in: window?.rootViewController) else { return }
-        tab.delegate = controller
         controller.install(on: tab.tabBar)
     }
 
