@@ -19,3 +19,30 @@ struct IconButton: View {
             .accessibilityLabel(systemName)
     }
 }
+
+/// 轻量提示：底部胶囊，2 秒自动消失，不打断当前页面。
+struct ToastModifier: ViewModifier {
+    @Binding var message: String?
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            if let message {
+                Text(message)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.78), in: Capsule())
+                    .padding(.bottom, 80)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: message)
+            }
+        }
+    }
+}
+
+extension View {
+    func toast(message: Binding<String?>) -> some View {
+        modifier(ToastModifier(message: message))
+    }
+}

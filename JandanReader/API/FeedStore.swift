@@ -19,6 +19,8 @@ final class FeedStore: ObservableObject {
     @Published private(set) var isLoadingMore = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var infoMessage: String?
+    /// 轻量提示（投票失败等），2 秒自动消失。
+    @Published var toastMessage: String?
     @Published private(set) var path: [JDNavigation] = []
     @Published private(set) var forwardStack: [JDNavigation] = []
 
@@ -41,6 +43,15 @@ final class FeedStore: ObservableObject {
     }
 
     func configure(history: HistoryStore) { self.history = history }
+
+    /// 轻量提示：连续触发时只保留最后一条。
+    func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if self.toastMessage == message { self.toastMessage = nil }
+        }
+    }
 
     var canGoBack: Bool { !path.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
@@ -126,9 +137,14 @@ final class FeedStore: ObservableObject {
         do {
             try await JDAPI.vote(commentID: item.id, like: like)
         } catch {
-            items[index] = original
-            votedKinds.removeValue(forKey: item.id)
-            errorMessage = error.localizedDescription
+            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
+                // 服务端已有这一票：保留乐观票数并标记已投，避免误判为失败。
+                showToast("您已经投过票了")
+            } else {
+                items[index] = original
+                votedKinds.removeValue(forKey: item.id)
+                showToast(error.localizedDescription)
+            }
         }
     }
 
@@ -147,9 +163,13 @@ final class FeedStore: ObservableObject {
         do {
             try await JDAPI.vote(commentID: commentID, like: like)
         } catch {
-            inlineComments[itemID]![index] = original
-            votedKinds.removeValue(forKey: commentID)
-            errorMessage = error.localizedDescription
+            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
+                showToast("您已经投过票了")
+            } else {
+                inlineComments[itemID]![index] = original
+                votedKinds.removeValue(forKey: commentID)
+                showToast(error.localizedDescription)
+            }
         }
     }
 

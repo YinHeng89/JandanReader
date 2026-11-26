@@ -31,6 +31,12 @@ enum JDAPI {
             case .cancelled: return "已取消"
             }
         }
+
+        /// 服务端已记录过这一票（本地状态丢失时会出现）。
+        var isAlreadyVoted: Bool {
+            guard case .business(let code, let msg) = self else { return false }
+            return code == 1 && msg.contains("投过票")
+        }
     }
 
     /// 统一 GET：返回 envelope.data，业务 code != 0 时抛错。

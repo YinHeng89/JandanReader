@@ -23,6 +23,10 @@ struct PhotoFeedView: View {
                 list
             }
         }
+        .toast(message: Binding(
+            get: { store.toastMessage },
+            set: { store.toastMessage = $0 }
+        ))
         .task { await store.load() }
     }
 

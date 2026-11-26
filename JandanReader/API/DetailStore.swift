@@ -15,10 +15,21 @@ final class DetailStore: ObservableObject {
     @Published private(set) var tucaos: [JDComment] = []
     @Published private(set) var isLoading = true
     @Published private(set) var errorMessage: String?
+    /// 投票失败等轻量提示，2 秒自动消失。
+    @Published var toastMessage: String?
 
     let item: JDFeedItem
 
     init(item: JDFeedItem) { self.item = item }
+
+    /// 轻量提示：连续触发时只保留最后一条。
+    func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if self.toastMessage == message { self.toastMessage = nil }
+        }
+    }
 
     func load() async {
         isLoading = true
@@ -89,12 +100,17 @@ final class DetailStore: ObservableObject {
         do {
             try await JDAPI.vote(commentID: commentID, like: like)
         } catch {
-            switch list {
-            case .comments: comments[index] = original
-            case .tucaos: tucaos[index] = original
+            if let apiError = error as? JDAPI.APIError, apiError.isAlreadyVoted {
+                // 服务端已有这一票：保留乐观票数并标记已投。
+                showToast("您已经投过票了")
+            } else {
+                switch list {
+                case .comments: comments[index] = original
+                case .tucaos: tucaos[index] = original
+                }
+                votedKinds.removeValue(forKey: commentID)
+                showToast(error.localizedDescription)
             }
-            votedKinds.removeValue(forKey: commentID)
-            errorMessage = error.localizedDescription
         }
     }
 }

@@ -32,6 +32,10 @@ struct PostDetailView: View {
         }
         .navigationTitle(store.item.title.isEmpty ? "详情" : store.item.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toast(message: Binding(
+            get: { store.toastMessage },
+            set: { store.toastMessage = $0 }
+        ))
         .task { await store.load() }
     }
 
