@@ -405,7 +405,8 @@ struct InlineImageContainer: UIViewRepresentable {
         nonisolated private func fetch(_ url: URL, completion: @escaping (Data?) -> Void) -> URLSessionDataTask {
             var request = URLRequest(url: url)
             request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            // 走统一缓存 session：命中磁盘/内存时直接返回，滚动回看不重复下载。
+            let task = ImageCache.session.dataTask(with: request) { data, response, error in
                 guard error == nil, let data,
                       let http = response as? HTTPURLResponse,
                       (200..<300).contains(http.statusCode) else {

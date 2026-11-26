@@ -215,12 +215,8 @@ private struct CommentRow: View {
             HStack(alignment: .center, spacing: 10) {
                 if let avatar = comment.avatar_ref, !avatar.isEmpty {
                     let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar)
-                    AsyncImage(url: url) { phase in
-                        if case .success(let image) = phase {
-                            image.resizable().scaledToFill()
-                        } else {
-                            Color(.secondarySystemBackground)
-                        }
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
                     }
                     .frame(width: 24, height: 24)
                     .clipShape(Circle())

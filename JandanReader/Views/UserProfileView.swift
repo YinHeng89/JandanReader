@@ -167,12 +167,8 @@ struct UserProfileView: View {
         Group {
             if let raw, !raw.isEmpty,
                let url = URL(string: raw.hasPrefix("/") ? "https://jandan.net" + raw : raw) {
-                AsyncImage(url: url) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFill()
-                    } else {
-                        Color(.secondarySystemBackground)
-                    }
+                CachedAsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
                 }
             } else {
                 Color(.secondarySystemBackground)

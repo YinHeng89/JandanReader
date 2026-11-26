@@ -303,9 +303,8 @@ private struct PhotoRow: View {
                 Button { onProfile?() } label: {
                     HStack(spacing: 6) {
                         if let avatar = item.avatar, let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
-                            AsyncImage(url: url) { phase in
-                                if case .success(let image) = phase { image.resizable().scaledToFill() }
-                                else { Color(.secondarySystemBackground) }
+                            CachedAsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
                             }
                             .frame(width: 22, height: 22)
                             .clipShape(Circle())
@@ -469,9 +468,8 @@ private struct InlineCommentRow: View {
             HStack(alignment: .center, spacing: 10) {
                 if let avatar = comment.avatar_ref, !avatar.isEmpty,
                    let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
-                    AsyncImage(url: url) { phase in
-                        if case .success(let image) = phase { image.resizable().scaledToFill() }
-                        else { Color(.secondarySystemBackground) }
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
                     }
                     .frame(width: 22, height: 22)
                     .clipShape(Circle())
