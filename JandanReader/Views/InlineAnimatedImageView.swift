@@ -421,6 +421,12 @@ struct InlineImageContainer: UIViewRepresentable {
                     completion(nil)
                     return
                 }
+                // 站点图片响应没有 Cache-Control，只有 ETag/Last-Modified，
+                // URLSession 不会可靠地把响应写入磁盘缓存。这里显式落盘，
+                // 保证重启后仍能命中（缓存统计里的「磁盘」才会增长）。
+                ImageCache.shared.storeCachedResponse(
+                    CachedURLResponse(response: http, data: data), for: request
+                )
                 completion(data)
             }
             task.resume()
