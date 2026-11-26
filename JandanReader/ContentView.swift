@@ -8,37 +8,88 @@ extension Notification.Name {
 
 /// 拦截底部 Tab 点击：重复点当前 tab 时单击不做任何事（系统默认会 pop 到根），
 /// 双击则发通知让列表置顶并刷新。切换其它 tab 保持系统默认行为。
+///
+/// iOS 18+ 的 SwiftUI TabView 重复点当前 tab 时不一定调用 UIKit 的 shouldSelect，
+/// 所以同时在 UITabBar 上挂一个不吞触摸的 tap 手势，直接按点击位置识别 tab。
 final class TabTapController: NSObject, UITabBarControllerDelegate {
-    private var lastIndex = -1
-    private var lastTime: TimeInterval = 0
+    private struct TapRecord {
+        let index: Int
+        let time: TimeInterval
+    }
+
+    private var records: [String: TapRecord] = [:]
+    private var lastFired: TimeInterval = 0
+    private weak var installedBar: UITabBar?
 
     func tabBarController(_ tabBarController: UITabBarController,
                           shouldSelect viewController: UIViewController) -> Bool {
         guard let vcs = tabBarController.viewControllers,
               let idx = vcs.firstIndex(of: viewController) else { return true }
-        let now = Date().timeIntervalSince1970
         if tabBarController.selectedViewController === viewController {
-            if idx == lastIndex, now - lastTime < 0.35 {
-                lastTime = 0
-                // 前 N 个 tab 对应 Channel.all，最后一个是设置页。
-                if idx < Channel.all.count {
-                    NotificationCenter.default.post(
-                        name: .jdTabDoubleTap, object: Channel.all[idx].id
-                    )
-                }
-            } else {
-                lastIndex = idx
-                lastTime = now
-            }
+            noteTap(idx, source: "delegate")
             return false
         }
-        lastIndex = -1
-        lastTime = 0
+        records.removeAll()
         return true
+    }
+
+    /// 幂等安装；host VC 的布局回调会多次调用，避免重复加手势。
+    func install(on bar: UITabBar) {
+        guard installedBar !== bar else { return }
+        installedBar = bar
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tabBarTapped(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        bar.addGestureRecognizer(tap)
+    }
+
+    @objc private func tabBarTapped(_ gesture: UITapGestureRecognizer) {
+        guard let bar = gesture.view as? UITabBar,
+              let count = bar.items?.count, count > 0 else { return }
+        let point = gesture.location(in: bar)
+        // UITabBarButton 是系统私有视图，用 accessibilityTraits 识别，不直接引用私有类。
+        let buttons = bar.subviews
+            .filter { $0.accessibilityTraits.contains(.button) && $0.frame.width > 20 }
+            .sorted { $0.frame.minX < $1.frame.minX }
+        let index: Int
+        if let found = buttons.firstIndex(where: { $0.frame.contains(point) }) {
+            index = found
+        } else {
+            // 识别不到按钮视图时按等宽分区兜底（4 个 tab 均分）。
+            index = Int(point.x / max(bar.bounds.width / CGFloat(count), 1))
+        }
+        guard (0..<count).contains(index) else { return }
+        noteTap(index, source: "gesture")
+    }
+
+    /// 同一个 tab 在 0.8 秒内第二次触摸视为双击；不同来源（delegate/手势）不会互相误判。
+    private func noteTap(_ index: Int, source: String) {
+        let now = Date().timeIntervalSince1970
+        if let previous = records[source], previous.index == index, now - previous.time < 0.8 {
+            records[source] = nil
+            // 两个来源可能同时上报同一次双击，限制 0.6 秒内只发一次。
+            guard now - lastFired > 0.6 else { return }
+            lastFired = now
+            if index < Channel.all.count {
+                NotificationCenter.default.post(
+                    name: .jdTabDoubleTap, object: Channel.all[index].id
+                )
+            }
+        } else {
+            records[source] = TapRecord(index: index, time: now)
+        }
     }
 }
 
-/// 把上面的 delegate 挂到 SwiftUI TabView 底层的 UITabBarController 上。
+extension TabTapController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        // 不能吞掉 UITabBar 自己的触摸，否则 tab 切换会失效。
+        true
+    }
+}
+
+/// 把上面的 delegate / 手势挂到 SwiftUI TabView 底层的 UITabBarController 上。
 struct TabDelegateHost: UIViewControllerRepresentable {
     let controller: TabTapController
 
@@ -61,7 +112,18 @@ final class TabDelegateHostVC: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        tabBarController?.delegate = controller
+        attach()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        attach()
+    }
+
+    private func attach() {
+        guard let tabBarController else { return }
+        tabBarController.delegate = controller
+        controller.install(on: tabBarController.tabBar)
     }
 }
 
@@ -74,6 +136,23 @@ struct ContentView: View {
     @ObservedObject private var notices = NoticeStore.shared
 
     @StateObject private var ui = ContentViewState()
+
+    /// 兜底：host VC 的 appear 时机在某些 iOS 版本上不稳定，从 keyWindow 再挂一次（幂等）。
+    private static func attachTabTap(controller: TabTapController) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow }
+        func findTabBar(in vc: UIViewController?) -> UITabBarController? {
+            guard let vc else { return nil }
+            if let tab = vc as? UITabBarController { return tab }
+            for child in vc.children {
+                if let tab = findTabBar(in: child) { return tab }
+            }
+            return nil
+        }
+        guard let tab = findTabBar(in: window?.rootViewController) else { return }
+        tab.delegate = controller
+        controller.install(on: tab.tabBar)
+    }
 
     var body: some View {
         tabView
@@ -95,6 +174,9 @@ struct ContentView: View {
                 // 登录态存在 Cookie 里，但 user 需要请求 /member/get_info 才能拿到。
                 // 不在启动时 refresh 的话，重启后 auth.isLoggedIn 一直是 false。
                 Task { await auth.refresh() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    Self.attachTabTap(controller: ui.tabTap)
+                }
             }
             .onChange(of: ui.selected) { _, newValue in
                 if case .channel(let channel) = newValue {

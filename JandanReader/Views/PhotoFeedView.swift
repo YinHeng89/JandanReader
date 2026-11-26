@@ -49,8 +49,6 @@ struct PhotoFeedView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             List {
-                // 双击 Tab 时的置顶锚点。
-                Color.clear.frame(height: 0).id("feed-top")
                 ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                     VStack(alignment: .leading, spacing: 0) {
                         PhotoRow(
@@ -89,8 +87,11 @@ struct PhotoFeedView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
                 guard note.object as? String == store.channel.id else { return }
+                // 不插占位行，直接滚到第一条内容（避免顶部出现分隔线）。
                 withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo("feed-top", anchor: .top)
+                    if let target = visibleItems.first?.id {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
                 }
                 Task { await store.reload() }
             }

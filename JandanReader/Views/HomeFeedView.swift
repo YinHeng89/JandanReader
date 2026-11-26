@@ -50,8 +50,6 @@ struct HomeFeedView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             List {
-                // 双击 Tab 时的置顶锚点。
-                Color.clear.frame(height: 0).id("feed-top")
                 ForEach(sections, id: \.date) { section in
                     Section {
                         ForEach(section.items) { item in
@@ -92,8 +90,11 @@ struct HomeFeedView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
                 guard note.object as? String == store.channel.id else { return }
+                // 用真实 Section 作为置顶目标，不插占位行（Plain List 会给占位行画分隔线）。
                 withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo("feed-top", anchor: .top)
+                    if let target = sections.first?.date {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
                 }
                 Task { await store.reload() }
             }
