@@ -165,42 +165,50 @@ private struct HomeRow: View {
                 .foregroundStyle(Color(.tertiaryLabel))
                 .frame(width: 36, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if !item.body.isEmpty {
-                    Text(item.body)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(settings.cleanMode ? 3 : 2)
+            // 文字区 + 右侧站点缩略图（thumb180），与官方列表布局一致。
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if !item.body.isEmpty {
+                        Text(item.body)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(settings.cleanMode ? 3 : 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let nickname = item.tucaoNickname, !nickname.isEmpty {
+                        HStack(alignment: .top, spacing: 6) {
+                            // 站点返回的 avatar_ref 是 /static/avatar/xx.png 相对路径，
+                            // 直接 URL(string:) 会得到相对 URL，AsyncImage 加载不到。
+                            if let avatar = item.tucaoAvatar,
+                               let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                                CachedAsyncImage(url: url) { image in
+                                    image.resizable().scaledToFill()
+                                }
+                                .frame(width: 18, height: 18)
+                                .clipShape(Circle())
+                            }
+                            Text("\(nickname): \(item.tucaoContent ?? "")")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(2)
+                        }
+                    }
                 }
 
-                if let nickname = item.tucaoNickname, !nickname.isEmpty {
-                    HStack(alignment: .top, spacing: 6) {
-                        // 站点返回的 avatar_ref 是 /static/avatar/xx.png 相对路径，
-                        // 直接 URL(string:) 会得到相对 URL，AsyncImage 加载不到。
-                        if let avatar = item.tucaoAvatar,
-                           let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
-                            AsyncImage(url: url) { phase in
-                                if case .success(let image) = phase {
-                                    image.resizable().scaledToFill()
-                                } else {
-                                    Color(.secondarySystemBackground)
-                                }
-                            }
-                            .frame(width: 18, height: 18)
-                            .clipShape(Circle())
-                        }
-                        Text("\(nickname): \(item.tucaoContent ?? "")")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(2)
+                if let raw = item.imageURL,
+                   let url = URL(string: raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw) {
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
                     }
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
             Spacer(minLength: 0)
