@@ -12,7 +12,7 @@ struct RichText: View {
     private var text: String { JDHTML.plain(html) }
     private var imageURLs: [URL] {
         guard showImages else { return [] }
-        return JDHTML.imageURLs(in: html).map { JDHTML.displayURL($0, thumbnail: settings.cleanMode) }
+        return JDHTML.imageURLs(in: html)
     }
 
     var body: some View {
@@ -25,17 +25,7 @@ struct RichText: View {
             if !imageURLs.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(imageURLs, id: \.absoluteString) { url in
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFit()
-                            default:
-                                Color(.secondarySystemBackground)
-                                    .frame(height: 140)
-                                    .overlay(ProgressView())
-                            }
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        InlineAnimatedImageView(url: url)
                     }
                 }
             }
@@ -58,15 +48,41 @@ enum JDHTML {
         }
     }
 
-    /// 官方两套尺寸：列表 `mw600`、详情 `mw1024`；GIF 大图走 `large/xxx.gif`。
-    /// `thumbnail = true` 用列表小图，false 用原图，对应设置里的「显示缩略图」。
+    /// 站点 GIF 有两种路径：`mw600/xxx.gif` 实测只有 1 帧（静态），
+    /// 动画只存在于 `large/xxx.gif`；缩略图还可能带 `.gif.webp` 后缀。
+    static func isGIF(_ url: URL) -> Bool {
+        url.absoluteString.localizedCaseInsensitiveContains(".gif")
+    }
+
+    /// 取 GIF 文件名（含 .gif，剥掉 .webp），例如 thumb180/a.gif.webp → a.gif。
+    private static func gifFileName(_ url: URL) -> String? {
+        let text = url.absoluteString
+        let pattern = #"/([^/?#]+?\.gif)(?:\.webp)?(?:[?#].*)?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range])
+    }
+
+    /// 动画原图：`https://host/large/xxx.gif`（唯一能播放的 GIF 版本）。
+    static func animatedGIFURL(_ url: URL) -> URL? {
+        guard let name = gifFileName(url), let host = url.host else { return nil }
+        return URL(string: "https://\(host)/large/\(name)")
+    }
+
+    /// 加载动画前的轻量占位：600px webp 静态帧，几十 KB。
+    static func staticGIFURL(_ url: URL) -> URL? {
+        guard let name = gifFileName(url), let host = url.host else { return nil }
+        return URL(string: "https://\(host)/mw600/\(name).webp")
+    }
+
+    /// 静态图尺寸切换；GIF 一律走动画原图，避免拿到单帧静态版本。
     static func displayURL(_ url: URL, thumbnail: Bool) -> URL {
         guard !thumbnail else { return url }
+        if isGIF(url) { return animatedGIFURL(url) ?? url }
         let text = url.absoluteString
-        let isGIF = text.lowercased().hasSuffix(".gif")
-        let target = isGIF ? "large" : "mw1024"
         let pattern = #"/(mw600|mw1024|large|thumb180)/"#
-        let replaced = text.replacingOccurrences(of: pattern, with: "/\(target)/", options: .regularExpression)
+        let replaced = text.replacingOccurrences(of: pattern, with: "/mw1024/", options: .regularExpression)
         return URL(string: replaced) ?? url
     }
 

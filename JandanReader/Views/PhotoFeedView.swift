@@ -173,9 +173,9 @@ private struct PhotoRow: View {
     @StateObject private var share = ShareState()
     @StateObject private var reportUI = ReportUIState()
 
-    /// 「显示缩略图」开启用列表 mw600，关闭用原图 mw1024 / large GIF。
+    /// 原始 URL 交给图片组件：GIF 会自动换到可播放的 large 版本。
     private var images: [URL] {
-        JDHTML.imageURLs(in: item.body).map { JDHTML.displayURL($0, thumbnail: settings.cleanMode) }
+        JDHTML.imageURLs(in: item.body)
     }
     private var text: String { JDHTML.plain(item.body) }
 
