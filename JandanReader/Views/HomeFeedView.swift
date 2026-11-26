@@ -38,15 +38,8 @@ struct HomeFeedView: View {
     private var list: some View {
         List {
             ForEach(sections, id: \.date) { section in
-                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        // 日期改成组首行上方的小标签，不再用 Section header 占一整行高度。
-                        if index == 0 {
-                            Text(section.date.jdSectionDate)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-                        }
+                Section {
+                    ForEach(section.items) { item in
                         Button { store.push(.feed(item)) } label: {
                             HomeRow(item: item)
                         }
@@ -61,6 +54,13 @@ struct HomeFeedView: View {
                             }
                         }
                     }
+                } header: {
+                    // Plain List 的 Section header 原生吸顶；压缩字号与边距，避免顶部过高。
+                    Text(section.date.jdSectionDate)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                 }
             }
             loadMoreSection
