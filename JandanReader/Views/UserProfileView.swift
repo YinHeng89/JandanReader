@@ -165,8 +165,7 @@ struct UserProfileView: View {
     @ViewBuilder
     private func avatar(url raw: String?, size: CGFloat) -> some View {
         Group {
-            if let raw, !raw.isEmpty,
-               let url = URL(string: raw.hasPrefix("/") ? "https://jandan.net" + raw : raw) {
+            if let url = JDAPI.avatarURL(raw) {
                 CachedAsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 }

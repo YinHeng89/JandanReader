@@ -195,10 +195,7 @@ private struct HomeRow: View {
 
             if let nickname = item.tucaoNickname, !nickname.isEmpty {
                 HStack(alignment: .top, spacing: 6) {
-                    // 站点返回的 avatar_ref 是 /static/avatar/xx.png 相对路径，
-                    // 直接 URL(string:) 会得到相对 URL，AsyncImage 加载不到。
-                    if let avatar = item.tucaoAvatar,
-                       let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                    if let url = JDAPI.avatarURL(item.tucaoAvatar) {
                         CachedAsyncImage(url: url) { image in
                             image.resizable().scaledToFill()
                         }

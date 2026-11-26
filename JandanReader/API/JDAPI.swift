@@ -11,6 +11,24 @@ enum JDAPI {
     static let base = "https://jandan.net"
     static let userAgent = "Jandan iOS App"
 
+    /// 头像静态资源域名。站点 API 返回的 avatar_ref 是 `/static/avatar/xx.png` 根相对路径，
+    /// 图片实际托管在 cdn.jandan.net；拼到主域 jandan.net 会 404（主域只跑 Nuxt 页面）。
+    static let avatarBase = "https://cdn.jandan.net"
+
+    /// 头像 URL 统一解析：兼顾根相对路径、`//` 协议相对、http→https、完整 URL。
+    static func avatarURL(_ raw: String?) -> URL? {
+        guard let raw, !raw.isEmpty else { return nil }
+        var text = raw
+        if text.hasPrefix("//") {
+            text = "https:" + text
+        } else if text.hasPrefix("/") {
+            text = avatarBase + text
+        } else if text.hasPrefix("http:") {
+            text = "https:" + text.dropFirst(5)
+        }
+        return URL(string: text)
+    }
+
     static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601

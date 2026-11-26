@@ -302,7 +302,7 @@ private struct PhotoRow: View {
             HStack(spacing: 6) {
                 Button { onProfile?() } label: {
                     HStack(spacing: 6) {
-                        if let avatar = item.avatar, let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                        if let url = JDAPI.avatarURL(item.avatar) {
                             CachedAsyncImage(url: url) { image in
                                 image.resizable().scaledToFill()
                             }
@@ -466,8 +466,7 @@ private struct InlineCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                if let avatar = comment.avatar_ref, !avatar.isEmpty,
-                   let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                if let url = JDAPI.avatarURL(comment.avatar_ref) {
                     CachedAsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     }

@@ -213,8 +213,7 @@ private struct CommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                if let avatar = comment.avatar_ref, !avatar.isEmpty {
-                    let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar)
+                if let url = JDAPI.avatarURL(comment.avatar_ref) {
                     CachedAsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     }
