@@ -3,12 +3,15 @@ import UIKit
 import ImageIO
 import AVFoundation
 
-/// 图片流里的图片：按原比例完整显示（不裁剪），GIF 用站点同款 mp4 循环播放。
+/// 图片流里的图片：按原比例完整显示（不裁剪）。
+/// GIF 默认只显示静态缩略图并暂停，点击后才加载 mp4 循环播放。
 struct InlineAnimatedImageView: View {
     let url: URL
 
     @EnvironmentObject private var settings: AppSettings
     @StateObject private var loader = InlineImageLoader()
+
+    private var isGIF: Bool { JDHTML.isGIF(url) }
 
     var body: some View {
         ZStack {
@@ -23,9 +26,31 @@ struct InlineAnimatedImageView: View {
                 }
                 .frame(height: 120)
             }
+
+            // GIF 未播放时叠一个「点击播放」标记，提示可点开动画。
+            if isGIF && !loader.isPlaying {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Label(loader.isLoadingAnimation ? "加载中" : "点击播放 GIF",
+                              systemImage: loader.isLoadingAnimation ? "arrow.triangle.2.circlepath" : "play.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.55), in: Capsule())
+                            .padding(8)
+                    }
+                }
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
+        .onTapGesture {
+            guard isGIF, !loader.isPlaying else { return }
+            loader.requestPlay()
+        }
     }
 }
 
@@ -33,6 +58,32 @@ struct InlineAnimatedImageView: View {
 final class InlineImageLoader: ObservableObject {
     @Published var phase: InlineImagePhase = .loading
     @Published var image: UIImage?
+    /// 用户是否已请求播放 GIF（点击触发）。
+    @Published var playRequested = false
+    /// 动画是否已在显示（mp4 或逐帧 GIF 已就位）。
+    @Published var isPlaying = false
+    @Published var isLoadingAnimation = false
+
+    func requestPlay() {
+        guard !playRequested else { return }
+        playRequested = true
+        isLoadingAnimation = true
+    }
+
+    func markPlaying() {
+        isPlaying = true
+        isLoadingAnimation = false
+    }
+
+    func markAnimationFailed() {
+        isLoadingAnimation = false
+    }
+
+    func reset() {
+        playRequested = false
+        isPlaying = false
+        isLoadingAnimation = false
+    }
 }
 
 enum InlineImagePhase {
@@ -117,6 +168,10 @@ struct InlineImageContainer: UIViewRepresentable {
     func updateUIView(_ uiView: FittingImageView, context: Context) {
         // 列表复用 / 设置切换后 URL 可能变，必须重新加载。
         context.coordinator.update(url, thumbnail: thumbnail, into: uiView)
+        // 用户点击 GIF 后开始加载并播放动画。
+        if loader.playRequested && !context.coordinator.playbackStarted {
+            context.coordinator.play(url, into: uiView)
+        }
     }
 
     static func dismantleUIView(_ uiView: FittingImageView, coordinator: Coordinator) {
@@ -135,6 +190,8 @@ struct InlineImageContainer: UIViewRepresentable {
         private var generation = 0
         private var hasImage = false
         private var animatedApplied = false
+        /// 是否已为该图片启动过动画（点击后只启动一次）。
+        private(set) var playbackStarted = false
 
         /// mp4 可用性缓存：img.toto.im 有 mp4，img.jandan.net 等老 CDN 没有。
         private static let availabilityLock = NSLock()
@@ -165,54 +222,24 @@ struct InlineImageContainer: UIViewRepresentable {
             targetView = view
             hasImage = false
             animatedApplied = false
+            playbackStarted = false
+            loader.reset()
             loader.image = nil
             loader.phase = .loading
             view.image = nil
             view.stopVideo()
 
             if JDHTML.isGIF(url) {
-                // 1) 几十 KB 的静态帧先占位，避免大图下载期间空白。
+                // GIF 默认只加载几十 KB 的静态帧，不下载 mp4、不自动播放。
+                // 点击后由 play() 负责加载动画。
                 let placeholder = JDHTML.staticGIFURL(url) ?? url
                 placeholderTask = fetch(placeholder) { [weak self] data in
                     guard let data, let image = Self.decode(data) else { return }
                     Task { @MainActor [weak self] in
-                        // 动画已到位时不能再被静态占位覆盖。
                         guard let self, gen == self.generation, !self.animatedApplied,
                               let view = self.targetView else { return }
                         self.apply(image, into: view)
                     }
-                }
-
-                // 2) 站点前端实际用同名 mp4 播放 GIF：H.264 硬件解码、边下边播，
-                //    体积约为 GIF 的一半，不会像 131 帧逐帧解码那样卡住。
-                if let video = JDHTML.animatedVideoURL(url) {
-                    let key = video.absoluteString
-                    Self.availabilityLock.lock()
-                    let known = Self.videoAvailability[key]
-                    Self.availabilityLock.unlock()
-                    if known == true {
-                        applyVideo(video, gen: gen, into: view)
-                        return
-                    }
-                    if known == false {
-                        loadAnimatedGIF(url, gen: gen, into: view)
-                        return
-                    }
-                    probeTask = probe(video) { [weak self] available in
-                        Self.availabilityLock.lock()
-                        Self.videoAvailability[key] = available
-                        Self.availabilityLock.unlock()
-                        Task { @MainActor [weak self] in
-                            guard let self, gen == self.generation, let view = self.targetView else { return }
-                            if available {
-                                self.applyVideo(video, gen: gen, into: view)
-                            } else {
-                                self.loadAnimatedGIF(url, gen: gen, into: view)
-                            }
-                        }
-                    }
-                } else {
-                    loadAnimatedGIF(url, gen: gen, into: view)
                 }
             } else {
                 let target = JDHTML.displayURL(url, thumbnail: thumbnail)
@@ -233,6 +260,45 @@ struct InlineImageContainer: UIViewRepresentable {
                         self.apply(image, into: view)
                     }
                 }
+            }
+        }
+
+        /// 用户点击 GIF 后才调用：探测同名 mp4 并播放，失败回退逐帧 GIF。
+        func play(_ url: URL, into view: FittingImageView) {
+            guard !playbackStarted, JDHTML.isGIF(url) else { return }
+            playbackStarted = true
+            let gen = generation
+            animatedApplied = false
+
+            // 站点前端实际用同名 mp4 播放 GIF：H.264 硬件解码、边下边播。
+            if let video = JDHTML.animatedVideoURL(url) {
+                let key = video.absoluteString
+                Self.availabilityLock.lock()
+                let known = Self.videoAvailability[key]
+                Self.availabilityLock.unlock()
+                if known == true {
+                    applyVideo(video, gen: gen, into: view)
+                    return
+                }
+                if known == false {
+                    loadAnimatedGIF(url, gen: gen, into: view)
+                    return
+                }
+                probeTask = probe(video) { [weak self] available in
+                    Self.availabilityLock.lock()
+                    Self.videoAvailability[key] = available
+                    Self.availabilityLock.unlock()
+                    Task { @MainActor [weak self] in
+                        guard let self, gen == self.generation, let view = self.targetView else { return }
+                        if available {
+                            self.applyVideo(video, gen: gen, into: view)
+                        } else {
+                            self.loadAnimatedGIF(url, gen: gen, into: view)
+                        }
+                    }
+                }
+            } else {
+                loadAnimatedGIF(url, gen: gen, into: view)
             }
         }
 
@@ -268,14 +334,13 @@ struct InlineImageContainer: UIViewRepresentable {
                     guard let self, gen == self.generation, let view = self.targetView else { return }
                     self.animatedApplied = true
                     self.apply(cached, into: view)
+                    self.loader.markPlaying()
                 }
                 return
             }
             mainTask = fetch(animated) { [weak self] data in
                 guard let data, let image = Self.decode(data) else {
-                    Task { @MainActor [weak self] in
-                        self?.markFailureIfNeeded(gen: gen)
-                    }
+                    Task { @MainActor [weak self] in self?.loader.markAnimationFailed() }
                     return
                 }
                 InlineImageCache.shared.store(image, dataCount: data.count, for: animated)
@@ -283,6 +348,7 @@ struct InlineImageContainer: UIViewRepresentable {
                     guard let self, gen == self.generation, let view = self.targetView else { return }
                     self.animatedApplied = true
                     self.apply(image, into: view)
+                    self.loader.markPlaying()
                 }
             }
         }
@@ -294,6 +360,7 @@ struct InlineImageContainer: UIViewRepresentable {
             hasImage = true
             view.playVideo(video)
             loader.phase = .loaded
+            loader.markPlaying()
         }
 
         nonisolated private static func decode(_ data: Data) -> UIImage? {
