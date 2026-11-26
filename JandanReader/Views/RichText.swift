@@ -64,10 +64,19 @@ enum JDHTML {
         return String(text[range])
     }
 
-    /// 动画原图：`https://host/large/xxx.gif`（唯一能播放的 GIF 版本）。
+    /// 动画原图：`https://host/large/xxx.gif`（逐帧解码的兜底版本）。
     static func animatedGIFURL(_ url: URL) -> URL? {
         guard let name = gifFileName(url), let host = url.host else { return nil }
         return URL(string: "https://\(host)/large/\(name)")
+    }
+
+    /// 站点前端播放 GIF 实际用的是同名 mp4（H.264 边下边播，体积约为 GIF 的一半）。
+    /// 例：`large/xxx.gif` → `large/xxx.mp4`。仅 img.toto.im 支持，用前需探测。
+    static func animatedVideoURL(_ url: URL) -> URL? {
+        guard let name = gifFileName(url), let host = url.host else { return nil }
+        // gifFileName 含 .gif 后缀（如 a.gif），mp4 用同名去后缀：a.gif → a.mp4。
+        let mp4Name = name.replacingOccurrences(of: ".gif", with: ".mp4", options: .caseInsensitive)
+        return URL(string: "https://\(host)/large/\(mp4Name)")
     }
 
     /// 加载动画前的轻量占位：600px webp 静态帧，几十 KB。

@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
 import ImageIO
+import AVFoundation
 
-/// 图片流里的图片：按原比例完整显示（不裁剪），GIF 逐帧循环播放。
+/// 图片流里的图片：按原比例完整显示（不裁剪），GIF 用站点同款 mp4 循环播放。
 struct InlineAnimatedImageView: View {
     let url: URL
 
@@ -120,6 +121,7 @@ struct InlineImageContainer: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: FittingImageView, coordinator: Coordinator) {
         coordinator.cancelAll()
+        uiView.stopVideo()
     }
 
     @MainActor
@@ -128,18 +130,25 @@ struct InlineImageContainer: UIViewRepresentable {
         private weak var targetView: FittingImageView?
         private var placeholderTask: URLSessionDataTask?
         private var mainTask: URLSessionDataTask?
+        private var probeTask: URLSessionDataTask?
         private var currentKey: String?
         private var generation = 0
         private var hasImage = false
         private var animatedApplied = false
+
+        /// mp4 可用性缓存：img.toto.im 有 mp4，img.jandan.net 等老 CDN 没有。
+        private static let availabilityLock = NSLock()
+        private static var videoAvailability: [String: Bool] = [:]
 
         init(loader: InlineImageLoader) { self.loader = loader }
 
         func cancelAll() {
             placeholderTask?.cancel()
             mainTask?.cancel()
+            probeTask?.cancel()
             placeholderTask = nil
             mainTask = nil
+            probeTask = nil
         }
 
         func update(_ url: URL, thumbnail: Bool, into view: FittingImageView) {
@@ -159,9 +168,10 @@ struct InlineImageContainer: UIViewRepresentable {
             loader.image = nil
             loader.phase = .loading
             view.image = nil
+            view.stopVideo()
 
             if JDHTML.isGIF(url) {
-                // 1) 几十 KB 的静态帧先占位，避免大 GIF 下载期间空白。
+                // 1) 几十 KB 的静态帧先占位，避免大图下载期间空白。
                 let placeholder = JDHTML.staticGIFURL(url) ?? url
                 placeholderTask = fetch(placeholder) { [weak self] data in
                     guard let data, let image = Self.decode(data) else { return }
@@ -173,29 +183,36 @@ struct InlineImageContainer: UIViewRepresentable {
                     }
                 }
 
-                // 2) large/*.gif 是唯一带动画的版本；系统解码保留每帧真实延迟。
-                guard let animated = JDHTML.animatedGIFURL(url) else {
-                    markFailureIfNeeded(gen: gen)
-                    return
-                }
-                if let cached = InlineImageCache.shared.image(for: animated) {
-                    animatedApplied = true
-                    apply(cached, into: view)
-                    return
-                }
-                mainTask = fetch(animated) { [weak self] data in
-                    guard let data, let image = Self.decode(data) else {
-                        Task { @MainActor [weak self] in
-                            self?.markFailureIfNeeded(gen: gen)
-                        }
+                // 2) 站点前端实际用同名 mp4 播放 GIF：H.264 硬件解码、边下边播，
+                //    体积约为 GIF 的一半，不会像 131 帧逐帧解码那样卡住。
+                if let video = JDHTML.animatedVideoURL(url) {
+                    let key = video.absoluteString
+                    Self.availabilityLock.lock()
+                    let known = Self.videoAvailability[key]
+                    Self.availabilityLock.unlock()
+                    if known == true {
+                        applyVideo(video, gen: gen, into: view)
                         return
                     }
-                    InlineImageCache.shared.store(image, dataCount: data.count, for: animated)
-                    Task { @MainActor [weak self] in
-                        guard let self, gen == self.generation, let view = self.targetView else { return }
-                        self.animatedApplied = true
-                        self.apply(image, into: view)
+                    if known == false {
+                        loadAnimatedGIF(url, gen: gen, into: view)
+                        return
                     }
+                    probeTask = probe(video) { [weak self] available in
+                        Self.availabilityLock.lock()
+                        Self.videoAvailability[key] = available
+                        Self.availabilityLock.unlock()
+                        Task { @MainActor [weak self] in
+                            guard let self, gen == self.generation, let view = self.targetView else { return }
+                            if available {
+                                self.applyVideo(video, gen: gen, into: view)
+                            } else {
+                                self.loadAnimatedGIF(url, gen: gen, into: view)
+                            }
+                        }
+                    }
+                } else {
+                    loadAnimatedGIF(url, gen: gen, into: view)
                 }
             } else {
                 let target = JDHTML.displayURL(url, thumbnail: thumbnail)
@@ -219,8 +236,66 @@ struct InlineImageContainer: UIViewRepresentable {
             }
         }
 
-        /// iOS 26 上 `UIImage(data:)` 对 GIF 只返回首帧（实测 frames=0），
+        /// 老 CDN 没有 mp4，先用一个字节的范围请求探测，再决定播放方式。
+        nonisolated private func probe(_ url: URL, completion: @escaping (Bool) -> Void) -> URLSessionDataTask {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("bytes=0-1023", forHTTPHeaderField: "Range")
+            request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
+            let task = URLSession.shared.dataTask(with: request) { _, response, error in
+                guard error == nil,
+                      let http = response as? HTTPURLResponse,
+                      (200..<300).contains(http.statusCode) else {
+                    completion(false)
+                    return
+                }
+                let type = http.allHeaderFields["Content-Type"] as? String ?? ""
+                completion(type.localizedCaseInsensitiveContains("video"))
+            }
+            task.resume()
+            return task
+        }
+
+        /// 兜底：老 CDN 无 mp4 时的逐帧解码。iOS 26 上 UIImage(data:) 只解首帧，
         /// 必须用 ImageIO 逐帧解码；总时长取各帧延迟之和，不再取平均值。
+        private func loadAnimatedGIF(_ url: URL, gen: Int, into view: FittingImageView) {
+            guard let animated = JDHTML.animatedGIFURL(url) else {
+                Task { @MainActor [weak self] in self?.markFailureIfNeeded(gen: gen) }
+                return
+            }
+            if let cached = InlineImageCache.shared.image(for: animated) {
+                Task { @MainActor [weak self] in
+                    guard let self, gen == self.generation, let view = self.targetView else { return }
+                    self.animatedApplied = true
+                    self.apply(cached, into: view)
+                }
+                return
+            }
+            mainTask = fetch(animated) { [weak self] data in
+                guard let data, let image = Self.decode(data) else {
+                    Task { @MainActor [weak self] in
+                        self?.markFailureIfNeeded(gen: gen)
+                    }
+                    return
+                }
+                InlineImageCache.shared.store(image, dataCount: data.count, for: animated)
+                Task { @MainActor [weak self] in
+                    guard let self, gen == self.generation, let view = self.targetView else { return }
+                    self.animatedApplied = true
+                    self.apply(image, into: view)
+                }
+            }
+        }
+
+        @MainActor
+        private func applyVideo(_ video: URL, gen: Int, into view: FittingImageView) {
+            guard gen == generation else { return }
+            animatedApplied = true
+            hasImage = true
+            view.playVideo(video)
+            loader.phase = .loaded
+        }
+
         nonisolated private static func decode(_ data: Data) -> UIImage? {
             autoreleasepool {
                 guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
@@ -244,8 +319,10 @@ struct InlineImageContainer: UIViewRepresentable {
             }
         }
 
-        private func fetch(_ url: URL, completion: @escaping (Data?) -> Void) -> URLSessionDataTask {
-            let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        nonisolated private func fetch(_ url: URL, completion: @escaping (Data?) -> Void) -> URLSessionDataTask {
+            var request = URLRequest(url: url)
+            request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 guard error == nil, let data,
                       let http = response as? HTTPURLResponse,
                       (200..<300).contains(http.statusCode) else {
@@ -273,13 +350,18 @@ struct InlineImageContainer: UIViewRepresentable {
 }
 
 /// UIImageView 自带 intrinsicContentSize：按可用宽度与图片比例给出高度，
-/// 图片按原比例完整显示，整行自然变高，下面内容顺次下移。
+/// 图片按原比例完整显示；GIF 的 mp4 叠在同一比例上静音循环播放。
 final class FittingImageView: UIView {
     private let imageView = UIImageView()
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
+    private var loopObserver: NSObjectProtocol?
+    private var sizeObservation: NSKeyValueObservation?
     private var aspect: CGFloat = 0
 
     var image: UIImage? {
         didSet {
+            stopVideo()
             let size = image?.size ?? .zero
             aspect = size.width > 0 ? size.height / size.width : 0
             imageView.image = image
@@ -300,9 +382,59 @@ final class FittingImageView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit { stopVideo() }
+
+    /// 用 AVPlayer 播放站点同款 mp4；静音、循环、边下边播，不再逐帧解码大 GIF。
+    func playVideo(_ url: URL) {
+        stopVideo()
+        let player = AVPlayer(url: url)
+        player.isMuted = true
+        player.volume = 0
+        player.actionAtItemEnd = .none
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspect
+        layer.frame = bounds
+        self.layer.addSublayer(layer)
+        self.player = player
+        self.playerLayer = layer
+
+        loopObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main
+        ) { [weak player] _ in
+            player?.seek(to: .zero)
+            player?.play()
+        }
+        // 视频真实尺寸到位后修正比例，避免高度按默认 220 显示。
+        sizeObservation = player.currentItem?.observe(\.presentationSize, options: [.initial, .new]) {
+            [weak self] item, _ in
+            let size = item.presentationSize
+            guard size.width > 0, size.height > 0 else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.aspect = size.height / size.width
+                self.invalidateIntrinsicContentSize()
+                self.setNeedsLayout()
+            }
+        }
+        player.play()
+    }
+
+    func stopVideo() {
+        if let observer = loopObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        loopObserver = nil
+        sizeObservation = nil
+        player?.pause()
+        player = nil
+        playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         imageView.frame = bounds
+        playerLayer?.frame = bounds
         if bounds.width > 0 { invalidateIntrinsicContentSize() }
     }
 
