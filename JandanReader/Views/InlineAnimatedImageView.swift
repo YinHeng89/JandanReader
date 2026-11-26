@@ -126,6 +126,8 @@ final class InlineImageCache {
         let bytes = image.size.width * image.size.height * 4 * CGFloat(frames)
         cache.setObject(image, forKey: url.absoluteString as NSString, cost: max(Int(bytes), 1))
     }
+
+    func clear() { cache.removeAllObjects() }
 }
 
 /// 分享面板的内容。下载原图后给系统分享真实的图片数据，而不是一个链接。

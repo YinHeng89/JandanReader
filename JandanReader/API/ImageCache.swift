@@ -23,8 +23,41 @@ enum ImageCache {
         return URLSession(configuration: config)
     }()
 
-    /// 清除磁盘 + 内存图片缓存。
-    static func clear() { shared.removeAllCachedResponses() }
+    /// 缓存占用统计。URLCache 的 disk/memory usage 是公开 API，
+    /// 解码位图缓存（InlineImageCache）由 NSCache 自动回收，无法精确统计，只纳入清除范围。
+    struct Usage {
+        let memory: Int
+        let disk: Int
+
+        static let zero = Usage(memory: 0, disk: 0)
+
+        var total: Int { memory + disk }
+
+        var label: String {
+            guard total > 0 else { return "暂无缓存" }
+            return "磁盘 \(Self.format(disk)) · 内存 \(Self.format(memory))"
+        }
+
+        private static func format(_ bytes: Int) -> String {
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            formatter.allowedUnits = [.useKB, .useMB, .useGB]
+            return formatter.string(fromByteCount: Int64(bytes))
+        }
+    }
+
+    /// 读取占用放后台：currentDiskUsage 会枚举缓存目录，避免设置页出现时卡主线程。
+    static func readUsage() async -> Usage {
+        await Task.detached(priority: .utility) {
+            Usage(memory: shared.currentMemoryUsage, disk: shared.currentDiskUsage)
+        }.value
+    }
+
+    /// 清除磁盘 + 内存图片缓存，以及内存中的解码位图缓存。
+    static func clear() {
+        shared.removeAllCachedResponses()
+        InlineImageCache.shared.clear()
+    }
 }
 
 /// 替代 SwiftUI AsyncImage：走统一缓存 session，避免每次重新下载。

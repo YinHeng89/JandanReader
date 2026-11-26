@@ -5,6 +5,7 @@ import SwiftUI
 private final class SettingsTheme: ObservableObject {
     @Published var scheme: ColorScheme?
     @Published var showHistory = false
+    @Published var cacheUsage: ImageCache.Usage = .zero
 }
 
 struct SettingsView: View {
@@ -17,6 +18,11 @@ struct SettingsView: View {
     @StateObject private var theme = SettingsTheme()
     /// 作为底部 Tab 时常驻，不需要「完成」关闭按钮。
     var showsDoneButton: Bool = true
+
+    @MainActor
+    private func refreshCacheUsage() async {
+        theme.cacheUsage = await ImageCache.readUsage()
+    }
 
     var body: some View {
         NavigationStack {
@@ -142,6 +148,21 @@ struct SettingsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    HStack {
+                        Label("图片缓存", systemImage: "externaldrive")
+                        Spacer()
+                        Text(theme.cacheUsage.label)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    Button(role: .destructive) {
+                        ImageCache.clear()
+                        Task { await refreshCacheUsage() }
+                    } label: {
+                        Label("清除图片缓存", systemImage: "trash")
+                    }
                     Button(role: .destructive) {
                         history.clear()
                     } label: {
@@ -151,7 +172,7 @@ struct SettingsView: View {
                 } header: {
                     Text("数据")
                 } footer: {
-                    Text("阅读历史只保存在本机，不会上传。")
+                    Text("缓存包含网络图片与内存中的解码图；清除后重新加载会消耗流量。阅读历史只保存在本机，不会上传。")
                 }
 
                 Section {
@@ -184,7 +205,10 @@ struct SettingsView: View {
                     .environmentObject(router)
             }
         }
-        .onAppear { theme.scheme = settings.darkMode ? .dark : .light }
+        .onAppear {
+            theme.scheme = settings.darkMode ? .dark : .light
+            Task { await refreshCacheUsage() }
+        }
         .onChange(of: settings.darkMode) { _, dark in
             // 稍延迟让开关状态先提交，随后再切换 sheet 环境。
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
