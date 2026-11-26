@@ -15,6 +15,7 @@
 		19E52FA9ECBC6810931E031C /* FeedRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7640986E4F9F61AB450FF4D5 /* FeedRouter.swift */; };
 		1D87EBA8704367E777BBA55D /* BannedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB16B682A8223D3009C02053 /* BannedUsersView.swift */; };
 		22CBA18ED149691AD0BF9303 /* PrefsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DB9F8D69DB12D0AC7C946D1 /* PrefsStore.swift */; };
+		2A700E83A3D9E12EA26C1C50 /* ImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CE15CF1AC77485664DE9BE3 /* ImageCache.swift */; };
 		30D58ED5DAC1564B0861D7DF /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EEDE3EB317308FA0C668699 /* ActivityView.swift */; };
 		327001D6508B6690AC18C5E7 /* UserProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8921DC163C4A033691EC8ACD /* UserProfileStore.swift */; };
 		3A2A62383415019D3FE604B7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ADC0E5C6440318094FE4812 /* Assets.xcassets */; };
@@ -57,7 +58,7 @@
 		3D884677CE548C76542E7052 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		4697FFAA30626687DCF88134 /* InlineAnimatedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAnimatedImageView.swift; sourceTree = "<group>"; };
 		4C3DA8D7CCD6923351AD6CC6 /* GlassTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTabBar.swift; sourceTree = "<group>"; };
-		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		66E6C183ACDAF84DCC5D0E07 /* VoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoteStore.swift; sourceTree = "<group>"; };
 		68A7EDE95770203EDE96407F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -72,6 +73,7 @@
 		9544B75B0717D6E90982EA8D /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		97FF86927DA1F8B6B7FBADD6 /* FavoriteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoriteStore.swift; sourceTree = "<group>"; };
 		9ADC0E5C6440318094FE4812 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9CE15CF1AC77485664DE9BE3 /* ImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCache.swift; sourceTree = "<group>"; };
 		9F339947144C88863AB22236 /* ReportStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportStore.swift; sourceTree = "<group>"; };
 		A3548CA39E68CD66C422D927 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
 		A6CCCC4B078B825E05EA5CD0 /* JDAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JDAPI.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 				97FF86927DA1F8B6B7FBADD6 /* FavoriteStore.swift */,
 				7640986E4F9F61AB450FF4D5 /* FeedRouter.swift */,
 				3D884677CE548C76542E7052 /* FeedStore.swift */,
+				9CE15CF1AC77485664DE9BE3 /* ImageCache.swift */,
 				A6CCCC4B078B825E05EA5CD0 /* JDAPI.swift */,
 				81247A8D9F51C31397D101B8 /* NoticeStore.swift */,
 				1DB9F8D69DB12D0AC7C946D1 /* PrefsStore.swift */,
@@ -203,7 +206,6 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					86D591DFDCBE225F4DA0564D = {
-						DevelopmentTeam = QQ9F8WHWZQ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -261,6 +263,7 @@
 				1753289016082D4FDA5DF7FB /* HistoryStore.swift in Sources */,
 				8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */,
 				A79C7C0BEA02C6F1912DCEDA /* HomeFeedView.swift in Sources */,
+				2A700E83A3D9E12EA26C1C50 /* ImageCache.swift in Sources */,
 				7AA10F3F0453E5B0FBB219CA /* InlineAnimatedImageView.swift in Sources */,
 				B7227919D560802E6CB860CD /* JDAPI.swift in Sources */,
 				B35B88E9D6112C7E794FF9BE /* JDModels.swift in Sources */,
@@ -419,7 +422,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
+				DEVELOPMENT_TEAM = PGRMM8LGUV;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -441,7 +444,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
+				DEVELOPMENT_TEAM = PGRMM8LGUV;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
