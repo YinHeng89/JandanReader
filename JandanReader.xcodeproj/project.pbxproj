@@ -28,6 +28,7 @@
 		8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9544B75B0717D6E90982EA8D /* HistoryView.swift */; };
 		91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC214C1C9A26442324FFAFF /* Channel.swift */; };
 		93D3D3C148A24396DEF240A1 /* FavoriteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97FF86927DA1F8B6B7FBADD6 /* FavoriteStore.swift */; };
+		9D61B1767390944D94D41E73 /* WeChatLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67368E674B69D755B466D05 /* WeChatLoginView.swift */; };
 		9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10143E5578846E64131CD76C /* Components.swift */; };
 		A79C7C0BEA02C6F1912DCEDA /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A2757ED4E6D9D41144C5AA /* HomeFeedView.swift */; };
 		A99DA88335975C5E9C74ECE2 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF53B6C79276714CB795A2BD /* AuthStore.swift */; };
@@ -56,7 +57,7 @@
 		3D884677CE548C76542E7052 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		4697FFAA30626687DCF88134 /* InlineAnimatedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAnimatedImageView.swift; sourceTree = "<group>"; };
 		4C3DA8D7CCD6923351AD6CC6 /* GlassTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTabBar.swift; sourceTree = "<group>"; };
-		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		66E6C183ACDAF84DCC5D0E07 /* VoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoteStore.swift; sourceTree = "<group>"; };
 		68A7EDE95770203EDE96407F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -78,6 +79,7 @@
 		AA30CF799DBADC3E2194C435 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		AB16B682A8223D3009C02053 /* BannedUsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BannedUsersView.swift; sourceTree = "<group>"; };
 		AF5A9311F28FC0389B1C40A1 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		B67368E674B69D755B466D05 /* WeChatLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeChatLoginView.swift; sourceTree = "<group>"; };
 		BE3EDC034E1A9EA0C35DA84E /* JDModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JDModels.swift; sourceTree = "<group>"; };
 		C280D8399B68B112976E0086 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		E0BB54079F91623FF0E2588B /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 				0C96279EFF40AC7096F36A29 /* RichText.swift */,
 				4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */,
 				AA30CF799DBADC3E2194C435 /* UserProfileView.swift */,
+				B67368E674B69D755B466D05 /* WeChatLoginView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -200,6 +203,7 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					86D591DFDCBE225F4DA0564D = {
+						DevelopmentTeam = QQ9F8WHWZQ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -274,6 +278,7 @@
 				C6CF193C527EB314581F2A02 /* UserProfileView.swift in Sources */,
 				F4067C9646AA7080686E3820 /* ViewState.swift in Sources */,
 				640492479F162C649936918F /* VoteStore.swift in Sources */,
+				9D61B1767390944D94D41E73 /* WeChatLoginView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -414,7 +419,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -436,7 +441,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				DEVELOPMENT_TEAM = QQ9F8WHWZQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JandanReader/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
