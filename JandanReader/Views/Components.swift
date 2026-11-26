@@ -46,3 +46,25 @@ extension View {
         modifier(ToastModifier(message: message))
     }
 }
+
+/// 「有新内容」浮层：顶部胶囊，点击后刷新，不自动打断阅读。
+struct NewContentBanner: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.circle.fill")
+                Text("有新内容")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("有新内容，点击刷新")
+    }
+}

@@ -63,13 +63,10 @@ final class DetailStore: ObservableObject {
         isLoading = false
     }
 
-    /// 已投票的评论及方向（true=赞，false=踩），站点限制同一条只能投一次。
-    @Published private(set) var votedKinds: [Int: Bool] = [:]
-
-    func hasVoted(_ commentID: Int) -> Bool { votedKinds[commentID] != nil }
+    func hasVoted(_ commentID: Int) -> Bool { VoteStore.shared.isVoted(commentID) }
 
     /// 投票方向：true=赞，false=踩，nil=未投票。
-    func voteKind(_ commentID: Int) -> Bool? { votedKinds[commentID] }
+    func voteKind(_ commentID: Int) -> Bool? { VoteStore.shared.kind(commentID) }
 
     /// 投票：乐观更新，失败回滚。评论与吐槽都走同一个投票接口。
     func vote(commentID: Int, like: Bool) async {
@@ -79,6 +76,43 @@ final class DetailStore: ObservableObject {
         } else if let index = tucaos.firstIndex(where: { $0.id == commentID }) {
             await applyVote(commentID: commentID, like: like, list: .tucaos, index: index)
         }
+    }
+
+    /// 发布评论 / 吐槽。站点审核制，成功后插入本地待审核条目，刷新后自然消失。
+    @discardableResult
+    func submit(content: String, author: String) async -> Bool {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            showToast("请填写内容")
+            return false
+        }
+        do {
+            switch item.kind {
+            case .article:
+                try await JDAPI.createArticleComment(
+                    postID: item.id, content: text, author: author, email: ""
+                )
+                comments.insert(pendingComment(text, author: author), at: 0)
+            case .comment, .forum:
+                try await JDAPI.createTucao(commentID: item.id, content: text)
+                tucaos.insert(pendingComment(text, author: author), at: 0)
+            }
+            showToast("发布成功，请等待审核")
+            return true
+        } catch {
+            showToast(error.localizedDescription)
+            return false
+        }
+    }
+
+    private func pendingComment(_ text: String, author: String) -> JDComment {
+        JDComment(
+            id: -Int(Date().timeIntervalSince1970), post_id: nil, author: author,
+            author_type: nil, date_gmt: ISO8601DateFormatter().string(from: Date()),
+            user_id: nil, content: text, vote_positive: 0, vote_negative: 0,
+            sub_comment_count: nil, images: nil, post_title: nil, ip_location: nil,
+            avatar_ref: nil, avatar_type: nil, author_membership: nil, hot_tucao: nil, tags: nil
+        )
     }
 
     private enum VoteList { case comments, tucaos }
@@ -109,7 +143,7 @@ final class DetailStore: ObservableObject {
         case .comments: comments[index] = changed
         case .tucaos: tucaos[index] = changed
         }
-        votedKinds[commentID] = like
+        VoteStore.shared.set(commentID, like: like)
     }
 }
 

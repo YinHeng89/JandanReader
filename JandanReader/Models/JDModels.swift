@@ -373,6 +373,112 @@ struct JDUser: Codable {
     let avatar_type: Int?
 }
 
+// MARK: - 用户主页（游客可用）
+
+/// 按用户 ID 查资料：/api/member/user/{id}
+struct JDUserProfile: Codable {
+    let id: Int?
+    let nickname: String?
+    let avatar_ref: String?
+    let avatar_type: Int?
+    let membership: Int?
+    let reg_time: String?
+    let primary_badge_id: Int?
+    let wearing_badge_ids: [Int]?
+}
+
+/// 用户勋章列表：/api/member/user/{id}/badges
+struct JDBadge: Codable, Identifiable {
+    let recordID: Int?
+    let badgeID: Int?
+    let badge_name: String?
+    let badge_icon_url: String?
+    let is_wearing: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case recordID = "id"
+        case badgeID = "badge_id"
+        case badge_name, badge_icon_url, is_wearing
+    }
+
+    var id: Int { badgeID ?? recordID ?? 0 }
+    var isWearing: Bool { is_wearing == 1 }
+}
+
+struct JDBadgeList: Codable {
+    let list: [JDBadge]?
+}
+
+/// 用户评论 / 吐槽列表（游客仅能看到最近 20 条）。
+struct JDUserComments: Codable {
+    let has_more: Bool?
+    let list: [JDComment]?
+    let visibility: String?
+}
+
+struct JDUserTucaos: Codable {
+    let has_more: Bool?
+    let list: [JDArticleComment]?
+    let visibility: String?
+}
+
+// MARK: - 收藏（需登录）
+
+/// /api/member/comment/favorites?page=
+struct JDFavoritePage: Codable {
+    let list: [JDFavorite]?
+    let total: Int?
+}
+
+struct JDFavorite: Codable, Identifiable, Hashable {
+    /// 收藏记录 ID，取消收藏时用它。
+    let id: Int
+    let comment_id: Int?
+    let comment_author: String?
+    let post_title: String?
+    let comment_date: String?
+    let comment_content: String?
+}
+
+// MARK: - 消息通知（需登录）
+
+struct JDNotificationPage: Decodable {
+    let list: [JDNotification]?
+    let total: Int?
+}
+
+struct JDNotification: Decodable, Identifiable {
+    let id: Int
+    let title: String?
+    let content: String?
+    let created_at: String?
+    /// 服务端可能给 Bool 或 0/1，统一解成 Bool。
+    let readFlag: Bool
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, content, created_at
+        case readFlag = "is_read"
+        case url, link
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        title = try? c.decode(String.self, forKey: .title)
+        content = try? c.decode(String.self, forKey: .content)
+        created_at = try? c.decode(String.self, forKey: .created_at)
+        if let b = try? c.decode(Bool.self, forKey: .readFlag) {
+            readFlag = b
+        } else {
+            readFlag = (try? c.decode(Int.self, forKey: .readFlag)) == 1
+        }
+        url = (try? c.decode(String.self, forKey: .url)) ?? (try? c.decode(String.self, forKey: .link))
+    }
+
+    var isRead: Bool { readFlag }
+}
+
 struct JDCaptcha: Codable {
     let prompt: String?
     let image: String?

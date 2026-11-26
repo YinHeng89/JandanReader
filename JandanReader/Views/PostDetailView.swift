@@ -5,29 +5,37 @@ struct PostDetailView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var auth: AuthStore
     @StateObject private var store: DetailStore
+    @StateObject private var compose = ComposeState()
 
     init(item: JDFeedItem) {
         _store = StateObject(wrappedValue: DetailStore(item: item))
     }
 
     var body: some View {
-        Group {
-            if store.isLoading {
-                ProgressView("加载中…").tint(Color.accentColor)
+        VStack(spacing: 0) {
+            Group {
+                if store.isLoading {
+                    ProgressView("加载中…").tint(Color.accentColor)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let message = store.errorMessage {
+                    VStack(spacing: 12) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 30)).foregroundStyle(Color.accentColor)
+                        Text("加载失败").font(.headline)
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                        Button("重试") { Task { await store.load() } }
+                            .buttonStyle(.borderedProminent).tint(Color.accentColor)
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let message = store.errorMessage {
-                VStack(spacing: 12) {
-                    Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: 30)).foregroundStyle(Color.accentColor)
-                    Text("加载失败").font(.headline)
-                    Text(message).font(.caption).foregroundStyle(.secondary)
-                    Button("重试") { Task { await store.load() } }
-                        .buttonStyle(.borderedProminent).tint(Color.accentColor)
+                } else {
+                    content
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                content
+            }
+            if !store.isLoading && store.errorMessage == nil {
+                Divider()
+                composeBar
             }
         }
         .navigationTitle(store.item.title.isEmpty ? "详情" : store.item.title)
@@ -36,7 +44,45 @@ struct PostDetailView: View {
             get: { store.toastMessage },
             set: { store.toastMessage = $0 }
         ))
+        .toast(message: Binding(
+            get: { FavoriteStore.shared.toastMessage },
+            set: { FavoriteStore.shared.toastMessage = $0 }
+        ))
         .task { await store.load() }
+    }
+
+    private var composeBar: some View {
+        HStack(spacing: 8) {
+            TextField("发表吐槽…", text: $compose.draft)
+                .textFieldStyle(.roundedBorder)
+                .disabled(compose.isSending)
+            Button {
+                Task { await submit() }
+            } label: {
+                if compose.isSending {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("发送")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                compose.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || compose.isSending
+            )
+        }
+        .padding(12)
+    }
+
+    private func submit() async {
+        guard auth.isLoggedIn else {
+            store.showToast("请先登录煎蛋账号")
+            return
+        }
+        compose.isSending = true
+        defer { compose.isSending = false }
+        let ok = await store.submit(content: compose.draft, author: auth.user?.nickname ?? "匿名")
+        if ok { compose.draft = "" }
     }
 
     private var visibleComments: [JDComment] {
@@ -58,7 +104,12 @@ struct PostDetailView: View {
                     Divider()
                     Text("评论 · \(visibleComments.count)").font(.headline)
                     ForEach(visibleComments) { comment in
-                        CommentRow(comment: comment, voteKind: store.voteKind(comment.id)) {
+                        CommentRow(comment: comment, voteKind: store.voteKind(comment.id), onProfile: {
+                            if let uid = comment.user_id {
+                                router.store(for: Channel.withID(settings.lastChannelID))?
+                                    .push(.user(uid, comment.author ?? ""))
+                            }
+                        }, onNotice: { store.showToast($0) }) {
                             Task { await store.vote(commentID: comment.id, like: true) }
                         } onDown: {
                             Task { await store.vote(commentID: comment.id, like: false) }
@@ -69,7 +120,12 @@ struct PostDetailView: View {
                     Divider()
                     Text("吐槽 · \(visibleTucaos.count)").font(.headline)
                     ForEach(visibleTucaos) { tucao in
-                        CommentRow(comment: tucao, voteKind: store.voteKind(tucao.id)) {
+                        CommentRow(comment: tucao, voteKind: store.voteKind(tucao.id), onProfile: {
+                            if let uid = tucao.user_id {
+                                router.store(for: Channel.withID(settings.lastChannelID))?
+                                    .push(.user(uid, tucao.author ?? ""))
+                            }
+                        }, onNotice: { store.showToast($0) }) {
                             Task { await store.vote(commentID: tucao.id, like: true) }
                         } onDown: {
                             Task { await store.vote(commentID: tucao.id, like: false) }
@@ -139,10 +195,14 @@ struct PostDetailView: View {
 private struct CommentRow: View {
     let comment: JDComment
     let voteKind: Bool?
+    let onProfile: (() -> Void)?
+    let onNotice: (String) -> Void
     let onUp: (() -> Void)?
     let onDown: (() -> Void)?
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var auth: AuthStore
+    @StateObject private var reportUI = ReportUIState()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -159,18 +219,42 @@ private struct CommentRow: View {
                     .frame(width: 24, height: 24)
                     .clipShape(Circle())
                 }
-                Text(comment.author ?? "匿名")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .contextMenu {
-                        if let author = comment.author, !author.isEmpty {
-                            Button(role: .destructive) {
-                                banned.block(userID: comment.user_id, nickname: author)
-                            } label: {
-                                Label("屏蔽用户", systemImage: "hand.raised.slash")
-                            }
+                Button { onProfile?() } label: {
+                    Text(comment.author ?? "匿名")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .disabled(onProfile == nil)
+                .contextMenu {
+                    if let author = comment.author, !author.isEmpty {
+                        Button(role: .destructive) {
+                            banned.block(userID: comment.user_id, nickname: author)
+                        } label: {
+                            Label("屏蔽用户", systemImage: "hand.raised.slash")
                         }
                     }
+                    if ReportStore.shared.isReported(comment.id) {
+                        Text("已举报")
+                    } else {
+                        Button {
+                            reportUI.showReport = true
+                        } label: {
+                            Label("举报", systemImage: "flag")
+                        }
+                    }
+                    Button { toggleFavorite() } label: {
+                        Label(
+                            FavoriteStore.shared.isFavorite(comment.id) ? "取消收藏" : "收藏",
+                            systemImage: FavoriteStore.shared.isFavorite(comment.id) ? "bookmark.fill" : "bookmark"
+                        )
+                    }
+                }
+                if comment.id < 0 {
+                    Text("待审核")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
                 if let loc = comment.ip_location, !loc.isEmpty {
                     Text(loc).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 }
@@ -205,5 +289,37 @@ private struct CommentRow: View {
             RichText(html: comment.content ?? "", baseFont: 0.9)
         }
         .padding(.vertical, 10)
+        .confirmationDialog("举报原因", isPresented: $reportUI.showReport) {
+            Button("违法违规") { submitReport(type: 1, reason: "违法违规") }
+            Button("色情低俗") { submitReport(type: 2, reason: "色情低俗") }
+            Button("引战 / 人身攻击") { submitReport(type: 3, reason: "引战人身攻击") }
+            Button("取消", role: .cancel) {}
+        }
+    }
+
+    private func submitReport(type: Int, reason: String) {
+        Task {
+            do {
+                try await JDAPI.report(commentID: comment.id, reason: reason, type: type)
+                ReportStore.shared.mark(comment.id)
+                onNotice("举报已提交")
+            } catch {
+                onNotice(error.localizedDescription)
+            }
+        }
+    }
+
+    private func toggleFavorite() {
+        guard auth.isLoggedIn else {
+            onNotice("请先登录煎蛋账号")
+            return
+        }
+        Task {
+            if FavoriteStore.shared.isFavorite(comment.id) {
+                await FavoriteStore.shared.remove(commentID: comment.id)
+            } else {
+                await FavoriteStore.shared.add(commentID: comment.id)
+            }
+        }
     }
 }

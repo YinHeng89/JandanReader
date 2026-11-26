@@ -67,6 +67,36 @@ enum JDAPI {
         let _: AnyDecodable = try await post(path, form: form, as: AnyDecodable.self)
     }
 
+    /// 站点前端 apiFetch 默认用 JSON body，会员类接口用它更稳妥。
+    static func postJSONRaw(_ path: String, body: [String: Any]) async throws {
+        var req = URLRequest(url: URL(string: base + path)!)
+        req.httpMethod = "POST"
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        req.setValue(base + "/", forHTTPHeaderField: "Referer")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        if let envelope = try? decoder.decode(JDEnvelope<AnyDecodable>.self, from: data), envelope.code != 0 {
+            throw APIError.business(envelope.code, envelope.msg.isEmpty ? "请求失败" : envelope.msg)
+        }
+        guard (200..<300).contains(status) else { throw APIError.badStatus(status) }
+    }
+
+    /// 少数接口（check_notice）直接返回裸数字，不走 {code,data} 信封。
+    static func getRaw(_ path: String) async throws -> Data {
+        var req = URLRequest(url: URL(string: base + path)!)
+        req.httpMethod = "GET"
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        req.setValue(base + "/", forHTTPHeaderField: "Referer")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(status) else { throw APIError.badStatus(status) }
+        return data
+    }
+
     /// 投票等少数接口用 JSON body，响应是 {error, msg, comment_id} 而不是 JDEnvelope。
     static func vote(commentID: Int, like: Bool) async throws {
         var req = URLRequest(url: URL(string: base + "/api/comment/vote")!)
@@ -87,6 +117,117 @@ enum JDAPI {
         }
         let result = try JSONDecoder().decode(JDVoteResult.self, from: data)
         guard result.error == 0 else { throw APIError.business(result.error, result.msg ?? "投票失败") }
+    }
+
+    /// 举报评论：游客可调用，type 1=违法 / 2=色情 / 3=引战人身攻击。
+    static func report(commentID: Int, reason: String, type: Int) async throws {
+        try await postRaw("/api/report/comment", form: [
+            "action": "report",
+            "comment_id": "\(commentID)",
+            "reason": reason,
+            "type": "\(type)",
+        ])
+    }
+
+    // MARK: - 发布
+
+    /// 文章评论：站点审核后展示，发布成功不等于立即可见。
+    static func createArticleComment(postID: Int, content: String, author: String, email: String) async throws {
+        try await postJSONRaw("/api/comment/create_new", body: [
+            "author": author,
+            "email": email,
+            "comment_post_id": "\(postID)",
+            "content": content,
+            "anonymous": false,
+        ])
+    }
+
+    /// 吐槽：commentID 为父吐槽 ID，文章下新吐槽传 0 + postID。
+    static func createTucao(commentID: Int, postID: Int? = nil, content: String) async throws {
+        var body: [String: Any] = ["content": content, "comment_id": commentID]
+        if let postID { body["comment_post_ID"] = postID }
+        try await postJSONRaw("/api/tucao/create", body: body)
+    }
+
+    // MARK: - 收藏（需登录）
+
+    static func favorites(page: Int) async throws -> JDFavoritePage {
+        try await get("/api/member/comment/favorites", query: ["page": "\(page)"])
+    }
+
+    static func addFavorite(commentID: Int) async throws {
+        try await postJSONRaw("/api/member/comment/favorite", body: ["comment_id": commentID])
+    }
+
+    static func removeFavorite(favoriteID: Int) async throws {
+        try await postJSONRaw("/api/member/comment/favorite/delete", body: ["favorite_id": favoriteID])
+    }
+
+    // MARK: - 消息通知（需登录）
+
+    static func notifications(page: Int) async throws -> JDNotificationPage {
+        try await get("/api/member/notifications", query: ["page": "\(page)"])
+    }
+
+    /// 服务端返回裸数字或字符串数字，兼容两种并解掉可能的信封。
+    static func checkNotice() async throws -> Int {
+        let data = try await getRaw("/api/member/check_notice")
+        if let n = try? JSONDecoder().decode(Int.self, from: data) { return n }
+        if let s = try? JSONDecoder().decode(String.self, from: data), let n = Int(s) { return n }
+        if let envelope = try? decoder.decode(JDEnvelope<AnyDecodable>.self, from: data) {
+            guard envelope.code == 0 else { throw APIError.business(envelope.code, envelope.msg) }
+            if let v = envelope.data?.value as? Int { return v }
+            if let v = envelope.data?.value as? String, let n = Int(v) { return n }
+        }
+        return 0
+    }
+
+    static func readNotices(ids: [Int]) async throws {
+        try await postJSONRaw("/api/member/read_notices", body: ["unread_ids": ids])
+    }
+
+    static func clearNotices() async throws {
+        try await postJSONRaw("/api/member/clear_notices", body: [:])
+    }
+
+    // MARK: - 偏好云同步（VIP）
+
+    /// 响应可能是 {code,data:{prefs}}，也可能直接是 {prefs}，两种都兼容。
+    static func getPrefs() async throws -> [String: Any]? {
+        let data = try await getRaw("/api/member/prefs")
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if let code = json?["code"] as? Int, code != 0 {
+            throw APIError.business(code, json?["msg"] as? String ?? "同步失败")
+        }
+        if let envelope = json?["data"] as? [String: Any] {
+            return envelope["prefs"] as? [String: Any]
+        }
+        return json?["prefs"] as? [String: Any]
+    }
+
+    static func updatePrefs(_ prefs: [String: Any]) async throws {
+        try await postJSONRaw("/api/member/prefs", body: ["prefs": prefs])
+    }
+
+    // MARK: - 用户主页（游客可用）
+
+    static func userProfile(_ id: Int) async throws -> JDUserProfile {
+        try await get("/api/member/user/\(id)")
+    }
+
+    static func userBadges(_ id: Int) async throws -> [JDBadge] {
+        let page: JDBadgeList = try await get("/api/member/user/\(id)/badges")
+        return page.list ?? []
+    }
+
+    static func userComments(_ id: Int) async throws -> [JDComment] {
+        let page: JDUserComments = try await get("/api/comment/user/\(id)")
+        return page.list ?? []
+    }
+
+    static func userTucaos(_ id: Int) async throws -> [JDComment] {
+        let page: JDUserTucaos = try await get("/api/tucao/user/\(id)")
+        return (page.list ?? []).map(\.asComment)
     }
 
     private static func request<T: Decodable>(

@@ -52,6 +52,8 @@ final class FeedRouter: ObservableObject {
             : URL(string: "https://jandan.net/p/\(item.id)")!
         case .article(let id), .externalArticle(let id, _, _):
             return URL(string: "https://jandan.net/p/\(id)")!
+        case .user:
+            return URL(string: "https://jandan.net/")!
         }
     }
 }

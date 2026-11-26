@@ -7,6 +7,8 @@ enum JDNavigation: Hashable {
     case article(Int)
     /// 从历史直接打开：ID + 标题 + 内容类型
     case externalArticle(Int, String, JDFeedItem.Kind)
+    /// 作者个人主页：用户 ID + 昵称（昵称用于接口失败时兜底展示）
+    case user(Int, String)
 }
 
 /// 每个频道一个 FeedStore，切走再切回保留列表、滚动锚点与浏览栈。
@@ -29,9 +31,6 @@ final class FeedStore: ObservableObject {
     @Published private(set) var inlineComments: [Int: [JDComment]] = [:]
     @Published private(set) var inlineLoadingIDs: Set<Int> = []
     @Published private(set) var inlineErrors: [Int: String] = [:]
-
-    /// 已投票的条目及方向（true=赞，false=踩），站点限制同一条只能投一次。
-    @Published private(set) var votedKinds: [Int: Bool] = [:]
 
     private(set) var cursor: Int?
     private var loaded = false
@@ -110,12 +109,35 @@ final class FeedStore: ObservableObject {
         }
     }
 
+    /// 后台检查到新内容时的提示；不自动刷新，避免打断当前阅读。
+    @Published private(set) var hasNewContent = false
+
+    /// 只拉第一页最新一条做对比；失败静默，绝不打断阅读。
+    func checkForNewContent() async {
+        guard !isLoading, !isLoadingMore, !items.isEmpty else { return }
+        do {
+            let result = try await JDFeedLoader.load(source: source(page: initialPage))
+            guard let newest = result.items.first else { return }
+            if !items.contains(where: { $0.id == newest.id }) {
+                hasNewContent = true
+            }
+        } catch {
+            // 后台检查失败保持静默
+        }
+    }
+
+    /// 点击「有新内容」：收起浮层、刷新列表。
+    func acceptNewContent() async {
+        hasNewContent = false
+        await reload()
+    }
+
     // MARK: 图片流投票
 
-    func hasVoted(_ id: Int) -> Bool { votedKinds[id] != nil }
+    func hasVoted(_ id: Int) -> Bool { VoteStore.shared.isVoted(id) }
 
     /// 投票方向：true=赞，false=踩，nil=未投票。
-    func voteKind(_ id: Int) -> Bool? { votedKinds[id] }
+    func voteKind(_ id: Int) -> Bool? { VoteStore.shared.kind(id) }
 
     /// 图片流条目 id 就是评论 id，可直接投 OO / XX。
     func vote(item: JDFeedItem, like: Bool) async {
@@ -141,7 +163,7 @@ final class FeedStore: ObservableObject {
             tucaoContent: original.tucaoContent, tucaoAvatar: original.tucaoAvatar
         )
         items[index] = changed
-        votedKinds[item.id] = like
+        VoteStore.shared.set(item.id, like: like)
     }
 
     /// 行内吐槽投票：吐槽列表里的 comment_ID 同样走 /api/comment/vote。
@@ -161,7 +183,36 @@ final class FeedStore: ObservableObject {
             negative: like ? comment.vote_negative : (comment.vote_negative ?? 0) + 1
         )
         inlineComments[itemID]![index] = changed
-        votedKinds[commentID] = like
+        VoteStore.shared.set(commentID, like: like)
+    }
+
+    /// 行内吐槽发布：成功后插入本地待审核条目，刷新后自然消失。
+    @discardableResult
+    func submitInline(itemID: Int, commentID: Int, content: String, author: String) async -> Bool {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            showToast("请填写内容")
+            return false
+        }
+        do {
+            try await JDAPI.createTucao(commentID: commentID, content: text)
+            let escaped = text.replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+            let pending = JDComment(
+                id: -Int(Date().timeIntervalSince1970), post_id: nil, author: author,
+                author_type: nil, date_gmt: ISO8601DateFormatter().string(from: Date()),
+                user_id: nil, content: escaped, vote_positive: 0, vote_negative: 0,
+                sub_comment_count: nil, images: nil, post_title: nil, ip_location: nil,
+                avatar_ref: nil, avatar_type: nil, author_membership: nil, hot_tucao: nil, tags: nil
+            )
+            if inlineComments[itemID] == nil { inlineComments[itemID] = [] }
+            inlineComments[itemID]?.insert(pending, at: 0)
+            showToast("发布成功，请等待审核")
+            return true
+        } catch {
+            showToast(error.localizedDescription)
+            return false
+        }
     }
 
     // MARK: 图片流评论原地展开

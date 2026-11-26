@@ -6,6 +6,7 @@ struct HomeFeedView: View {
     @ObservedObject var store: FeedStore
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var sentinel = LoadMoreSentinel()
 
     private var sections: [(date: String, items: [JDFeedItem])] {
@@ -32,7 +33,18 @@ struct HomeFeedView: View {
                 list
             }
         }
-        .task { await store.load() }
+        .task {
+            await store.load()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                if !Task.isCancelled { await store.checkForNewContent() }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await store.checkForNewContent() }
+            }
+        }
     }
 
     private var list: some View {
@@ -67,6 +79,14 @@ struct HomeFeedView: View {
         }
         .listStyle(.plain)
         .refreshable { await store.reload() }
+        .overlay(alignment: .top) {
+            if store.hasNewContent {
+                NewContentBanner { Task { await store.acceptNewContent() } }
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+            }
+        }
     }
 
     @ViewBuilder

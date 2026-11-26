@@ -6,6 +6,7 @@ struct PhotoFeedView: View {
     @ObservedObject var store: FeedStore
     @EnvironmentObject private var banned: BannedStore
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var sentinel = LoadMoreSentinel()
 
     private var visibleItems: [JDFeedItem] {
@@ -27,7 +28,22 @@ struct PhotoFeedView: View {
             get: { store.toastMessage },
             set: { store.toastMessage = $0 }
         ))
-        .task { await store.load() }
+        .task {
+            await store.load()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                if !Task.isCancelled { await store.checkForNewContent() }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await store.checkForNewContent() }
+            }
+        }
+        .toast(message: Binding(
+            get: { FavoriteStore.shared.toastMessage },
+            set: { FavoriteStore.shared.toastMessage = $0 }
+        ))
     }
 
     private var list: some View {
@@ -42,7 +58,11 @@ struct PhotoFeedView: View {
                         onVote: { like in
                             Task { await store.vote(item: item, like: like) }
                         },
-                        voteKind: store.voteKind(item.id)
+                        voteKind: store.voteKind(item.id),
+                        onProfile: item.authorID.map { id in
+                            { store.push(.user(id, item.author)) }
+                        },
+                        onNotice: { store.showToast($0) }
                     )
                     if store.expandedCommentID == item.id {
                         InlineCommentsView(item: item, store: store)
@@ -56,6 +76,14 @@ struct PhotoFeedView: View {
         }
         .listStyle(.plain)
         .refreshable { await store.reload() }
+        .overlay(alignment: .top) {
+            if store.hasNewContent {
+                NewContentBanner { Task { await store.acceptNewContent() } }
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+            }
+        }
     }
 
     /// 距离底部还有 4 条时就开始取下一页，滚动时不再等网。
@@ -137,9 +165,13 @@ private struct PhotoRow: View {
     let onVote: (Bool) -> Void
     /// 当前用户的投票方向：true=赞，false=踩，nil=未投。
     let voteKind: Bool?
+    let onProfile: (() -> Void)?
+    let onNotice: (String) -> Void
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var auth: AuthStore
     @StateObject private var share = ShareState()
+    @StateObject private var reportUI = ReportUIState()
 
     /// 「显示缩略图」开启用列表 mw600，关闭用原图 mw1024 / large GIF。
     private var images: [URL] {
@@ -206,6 +238,21 @@ private struct PhotoRow: View {
                     Label("屏蔽用户", systemImage: "hand.raised.slash")
                 }
             }
+            if ReportStore.shared.isReported(item.id) {
+                Text("已举报")
+            } else {
+                Button {
+                    reportUI.showReport = true
+                } label: {
+                    Label("举报", systemImage: "flag")
+                }
+            }
+            Button { toggleFavorite() } label: {
+                Label(
+                    FavoriteStore.shared.isFavorite(item.id) ? "取消收藏" : "收藏",
+                    systemImage: FavoriteStore.shared.isFavorite(item.id) ? "bookmark.fill" : "bookmark"
+                )
+            }
         }
         .sheet(isPresented: Binding(
             get: { share.item != nil },
@@ -215,35 +262,78 @@ private struct PhotoRow: View {
                 ShareSheet(activityItems: [item])
             }
         }
+        .confirmationDialog("举报原因", isPresented: $reportUI.showReport) {
+            Button("违法违规") { submitReport(type: 1, reason: "违法违规") }
+            Button("色情低俗") { submitReport(type: 2, reason: "色情低俗") }
+            Button("引战 / 人身攻击") { submitReport(type: 3, reason: "引战人身攻击") }
+            Button("取消", role: .cancel) {}
+        }
+    }
+
+    private func submitReport(type: Int, reason: String) {
+        Task {
+            do {
+                try await JDAPI.report(commentID: item.id, reason: reason, type: type)
+                ReportStore.shared.mark(item.id)
+                onNotice("举报已提交")
+            } catch {
+                onNotice(error.localizedDescription)
+            }
+        }
+    }
+
+    private func toggleFavorite() {
+        guard auth.isLoggedIn else {
+            onNotice("请先登录煎蛋账号")
+            return
+        }
+        Task {
+            if FavoriteStore.shared.isFavorite(item.id) {
+                await FavoriteStore.shared.remove(commentID: item.id)
+            } else {
+                await FavoriteStore.shared.add(commentID: item.id)
+            }
+        }
     }
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // 用户那一行是详情入口；图片完整显示，长按分享。
-            Button(action: onOpen) {
-                HStack(spacing: 6) {
-                    if let avatar = item.avatar, let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
-                        AsyncImage(url: url) { phase in
-                            if case .success(let image) = phase { image.resizable().scaledToFill() }
-                            else { Color(.secondarySystemBackground) }
+            // 昵称进个人主页，日期 / 编号进详情；图片完整显示，长按分享。
+            HStack(spacing: 6) {
+                Button { onProfile?() } label: {
+                    HStack(spacing: 6) {
+                        if let avatar = item.avatar, let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                            AsyncImage(url: url) { phase in
+                                if case .success(let image) = phase { image.resizable().scaledToFill() }
+                                else { Color(.secondarySystemBackground) }
+                            }
+                            .frame(width: 22, height: 22)
+                            .clipShape(Circle())
                         }
-                        .frame(width: 22, height: 22)
-                        .clipShape(Circle())
+                        Text(item.author.isEmpty ? "匿名" : item.author)
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    Text(item.author.isEmpty ? "匿名" : item.author)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(item.date.jdShortDate)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                    Spacer()
-                    Text("#\(item.id)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .disabled(onProfile == nil)
+                .accessibilityLabel("查看作者主页")
+
+                Button(action: onOpen) {
+                    HStack(spacing: 6) {
+                        Text(item.date.jdShortDate)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                        Text("#\(item.id)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开详情")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("打开详情")
 
             if !text.isEmpty {
                 Text(text)
@@ -268,6 +358,8 @@ private struct InlineCommentsView: View {
     let item: JDFeedItem
     @ObservedObject var store: FeedStore
     @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var auth: AuthStore
+    @StateObject private var compose = ComposeState()
 
     private var loaded: [JDComment]? {
         store.inlineComments[item.id]?.filter {
@@ -304,7 +396,10 @@ private struct InlineCommentsView: View {
                         onVote: { like in
                             Task { await store.voteInline(commentID: comment.id, like: like) }
                         },
-                        voteKind: store.voteKind(comment.id)
+                        voteKind: store.voteKind(comment.id),
+                        onProfile: comment.user_id.map { id in
+                            { store.push(.user(id, comment.author ?? "")) }
+                        }
                     )
                 }
             } else {
@@ -312,9 +407,47 @@ private struct InlineCommentsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            Divider()
+            composeBar
         }
         .padding(.top, 10)
         .padding(.bottom, 10)
+    }
+
+    private var composeBar: some View {
+        HStack(spacing: 8) {
+            TextField("发表吐槽…", text: $compose.draft)
+                .textFieldStyle(.roundedBorder)
+                .disabled(compose.isSending)
+            Button {
+                Task { await submit() }
+            } label: {
+                if compose.isSending {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("发送")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                compose.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || compose.isSending
+            )
+        }
+    }
+
+    private func submit() async {
+        guard auth.isLoggedIn else {
+            store.showToast("请先登录煎蛋账号")
+            return
+        }
+        compose.isSending = true
+        defer { compose.isSending = false }
+        let ok = await store.submitInline(
+            itemID: item.id, commentID: item.id,
+            content: compose.draft, author: auth.user?.nickname ?? "匿名"
+        )
+        if ok { compose.draft = "" }
     }
 }
 
@@ -323,6 +456,7 @@ private struct InlineCommentRow: View {
     let comment: JDComment
     let onVote: (Bool) -> Void
     let voteKind: Bool?
+    let onProfile: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -336,9 +470,18 @@ private struct InlineCommentRow: View {
                     .frame(width: 22, height: 22)
                     .clipShape(Circle())
                 }
-                Text(comment.author ?? "匿名")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                Button { onProfile?() } label: {
+                    Text(comment.author ?? "匿名")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .disabled(onProfile == nil)
+                if comment.id < 0 {
+                    Text("待审核")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
                 if let location = comment.ip_location, !location.isEmpty {
                     Text(location).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 }

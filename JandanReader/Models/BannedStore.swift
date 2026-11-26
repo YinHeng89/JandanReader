@@ -93,5 +93,6 @@ final class BannedStore: ObservableObject {
     private func persist() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         defaults.set(data, forKey: Key.entries)
+        PrefsStore.shared.notifyLocalChange()
     }
 }

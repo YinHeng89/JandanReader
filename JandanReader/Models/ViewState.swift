@@ -21,3 +21,9 @@ final class SettingsViewState: ObservableObject {
     @Published var clearingCache = false
     @Published var cacheCleared = false
 }
+
+/// 发布输入框状态。Xcode 27 下用 ObservableObject 代替 View 内 @State。
+final class ComposeState: ObservableObject {
+    @Published var draft = ""
+    @Published var isSending = false
+}

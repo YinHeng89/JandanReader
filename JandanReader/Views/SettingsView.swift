@@ -12,6 +12,7 @@ struct SettingsView: View {
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var auth: AuthStore
     @Environment(\.dismiss) private var dismiss
     @StateObject private var theme = SettingsTheme()
     /// 作为底部 Tab 时常驻，不需要「完成」关闭按钮。
@@ -80,10 +81,53 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    NavigationLink {
+                        FavoritesView()
+                            .environmentObject(auth)
+                            .environmentObject(router)
+                            .environmentObject(settings)
+                    } label: {
+                        HStack {
+                            Label("我的收藏", systemImage: "bookmark")
+                            Spacer()
+                            if auth.isLoggedIn {
+                                Text("\(FavoriteStore.shared.commentIDs.count) 条")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("需登录").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    NavigationLink {
+                        NotificationsView()
+                            .environmentObject(auth)
+                            .environmentObject(settings)
+                    } label: {
+                        HStack {
+                            Label("消息通知", systemImage: "bell")
+                            Spacer()
+                            if auth.isLoggedIn && NoticeStore.shared.unread > 0 {
+                                Text("\(NoticeStore.shared.unread) 条未读")
+                                    .foregroundStyle(.secondary)
+                            } else if !auth.isLoggedIn {
+                                Text("需登录").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if PrefsStore.shared.canSync {
+                        HStack {
+                            Label("偏好云同步", systemImage: "icloud")
+                            Spacer()
+                            Text(PrefsStore.shared.isSynced ? "已同步" : "待同步")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Text("内容")
                 } footer: {
-                    Text("屏蔽后该作者的内容与评论将不再显示，仅保存在本机。")
+                    Text(PrefsStore.shared.canSync
+                         ? "订阅会员的屏蔽名单与显示设置会同步到云端，本地数据始终保留。"
+                         : "屏蔽后该作者的内容与评论将不再显示，仅保存在本机。")
                 }
 
                 Section {

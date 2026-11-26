@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var banned: BannedStore
+    @ObservedObject private var notices = NoticeStore.shared
 
     @StateObject private var ui = ContentViewState()
 
@@ -26,10 +27,34 @@ struct ContentView: View {
                 // TabView 三个 tab 同时存在，先把各自的 store 建好。
                 Channel.all.forEach { router.ensure($0) }
                 ui.selected = .channel(Channel.withID(settings.lastChannelID))
+                PrefsStore.shared.configure(settings: settings, banned: banned, auth: auth)
+                if auth.isLoggedIn {
+                    NoticeStore.shared.startPolling()
+                    Task {
+                        await NoticeStore.shared.refreshUnread()
+                        await FavoriteStore.shared.refresh()
+                        await PrefsStore.shared.pull()
+                    }
+                }
             }
             .onChange(of: ui.selected) { _, newValue in
                 if case .channel(let channel) = newValue {
                     settings.lastChannelID = channel.id
+                }
+            }
+            .onChange(of: auth.isLoggedIn) { _, loggedIn in
+                if loggedIn {
+                    NoticeStore.shared.startPolling()
+                    Task {
+                        await NoticeStore.shared.refreshUnread()
+                        await FavoriteStore.shared.refresh()
+                        PrefsStore.shared.configure(settings: settings, banned: banned, auth: auth)
+                        await PrefsStore.shared.pull()
+                    }
+                } else {
+                    NoticeStore.shared.stopPolling()
+                    NoticeStore.shared.reset()
+                    FavoriteStore.shared.clear()
                 }
             }
             .fullScreenCover(isPresented: $ui.showAccount) {
@@ -52,6 +77,7 @@ struct ContentView: View {
                 Tab("设置", systemImage: "gearshape.fill", value: AppTab.settings) {
                     settingsTab
                 }
+                .badge(notices.unread > 0 ? Text("\(notices.unread)") : nil)
             }
         } else {
             TabView(selection: $ui.selected) {
@@ -66,6 +92,7 @@ struct ContentView: View {
                     .tabItem {
                         Label("设置", systemImage: "gearshape.fill")
                     }
+                    .badge(notices.unread > 0 ? "\(notices.unread)" : nil)
                     .tag(AppTab.settings)
             }
         }
@@ -78,6 +105,7 @@ struct ContentView: View {
             .environmentObject(history)
             .environmentObject(router)
             .environmentObject(banned)
+            .environmentObject(auth)
     }
 
     @ViewBuilder
@@ -86,6 +114,7 @@ struct ContentView: View {
             NavigationStack(path: store.binding) {
                 channelView(for: channel, store: store)
                     .environmentObject(settings)
+                    .environmentObject(auth)
                     .navigationTitle(channel.title)
                     .navigationDestination(for: JDNavigation.self) { route in
                         destinationView(for: route)
@@ -108,11 +137,22 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private func destinationView(for route: JDNavigation) -> some View {
-        PostDetailView(item: item(from: route))
-            .environmentObject(settings)
-            .environmentObject(router)
-            .environmentObject(banned)
+        switch route {
+        case .user(let id, let nickname):
+            UserProfileView(userID: id, nickname: nickname)
+                .environmentObject(settings)
+                .environmentObject(banned)
+                .environmentObject(router)
+                .environmentObject(auth)
+        default:
+            PostDetailView(item: item(from: route))
+                .environmentObject(settings)
+                .environmentObject(router)
+                .environmentObject(banned)
+                .environmentObject(auth)
+        }
     }
 
     private func item(from route: JDNavigation) -> JDFeedItem {
@@ -124,6 +164,11 @@ struct ContentView: View {
                               location: nil, avatar: nil)
         case .externalArticle(let id, let title, let kind):
             return JDFeedItem(id: id, kind: kind, title: title, body: "", author: "", date: "",
+                              imageURL: nil, commentCount: 0, positive: 0, negative: 0,
+                              location: nil, avatar: nil)
+        case .user:
+            // 用户页由 destinationView 单独处理，这里是不可达的兜底。
+            return JDFeedItem(id: 0, kind: .article, title: "", body: "", author: "", date: "",
                               imageURL: nil, commentCount: 0, positive: 0, negative: 0,
                               location: nil, avatar: nil)
         }

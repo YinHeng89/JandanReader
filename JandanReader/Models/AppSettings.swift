@@ -13,13 +13,22 @@ final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
 
     @Published var darkMode: Bool {
-        didSet { defaults.set(darkMode, forKey: Key.dark) }
+        didSet {
+            defaults.set(darkMode, forKey: Key.dark)
+            PrefsStore.shared.notifyLocalChange()
+        }
     }
     @Published var cleanMode: Bool {
-        didSet { defaults.set(cleanMode, forKey: Key.clean) }
+        didSet {
+            defaults.set(cleanMode, forKey: Key.clean)
+            PrefsStore.shared.notifyLocalChange()
+        }
     }
     @Published var fontScale: Double {
-        didSet { defaults.set(fontScale, forKey: Key.font) }
+        didSet {
+            defaults.set(fontScale, forKey: Key.font)
+            PrefsStore.shared.notifyLocalChange()
+        }
     }
     @Published var lastChannelID: String {
         didSet { defaults.set(lastChannelID, forKey: Key.channel) }
