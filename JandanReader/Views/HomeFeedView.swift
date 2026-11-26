@@ -172,21 +172,22 @@ private struct HomeRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
+            // 评论数保持最初的大号数字，文章文字维持原字号。
             Text("\(item.score)")
-                .font(.system(size: 38, weight: .light, design: .rounded))
+                .font(.system(size: 34, weight: .light, design: .rounded))
                 .foregroundStyle(Color(.tertiaryLabel))
-                .frame(width: 40, alignment: .leading)
+                .frame(width: 36, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !item.body.isEmpty {
                     Text(item.body)
-                        .font(.system(size: 15))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .lineLimit(settings.cleanMode ? 3 : 2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -202,7 +203,7 @@ private struct HomeRow: View {
                             .clipShape(Circle())
                         }
                         Text("\(nickname): \(item.tucaoContent ?? "")")
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
                             .lineLimit(2)
                     }
