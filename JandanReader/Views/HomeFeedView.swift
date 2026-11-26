@@ -48,43 +48,54 @@ struct HomeFeedView: View {
     }
 
     private var list: some View {
-        List {
-            ForEach(sections, id: \.date) { section in
-                Section {
-                    ForEach(section.items) { item in
-                        Button { store.push(.feed(item)) } label: {
-                            HomeRow(item: item)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if let nickname = item.tucaoNickname, !nickname.isEmpty {
-                                Button(role: .destructive) {
-                                    banned.block(userID: nil, nickname: nickname)
-                                } label: {
-                                    Label("屏蔽用户", systemImage: "hand.raised.slash")
+        ScrollViewReader { proxy in
+            List {
+                // 双击 Tab 时的置顶锚点。
+                Color.clear.frame(height: 0).id("feed-top")
+                ForEach(sections, id: \.date) { section in
+                    Section {
+                        ForEach(section.items) { item in
+                            Button { store.push(.feed(item)) } label: {
+                                HomeRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if let nickname = item.tucaoNickname, !nickname.isEmpty {
+                                    Button(role: .destructive) {
+                                        banned.block(userID: nil, nickname: nickname)
+                                    } label: {
+                                        Label("屏蔽用户", systemImage: "hand.raised.slash")
+                                    }
                                 }
                             }
                         }
+                    } header: {
+                        // Plain List 的 Section header 原生吸顶；压缩字号与边距，避免顶部过高。
+                        Text(section.date.jdSectionDate)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                     }
-                } header: {
-                    // Plain List 的 Section header 原生吸顶；压缩字号与边距，避免顶部过高。
-                    Text(section.date.jdSectionDate)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(nil)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+                }
+                loadMoreSection
+            }
+            .listStyle(.plain)
+            .refreshable { await store.reload() }
+            .overlay(alignment: .top) {
+                if store.hasNewContent {
+                    NewContentBanner { Task { await store.acceptNewContent() } }
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
                 }
             }
-            loadMoreSection
-        }
-        .listStyle(.plain)
-        .refreshable { await store.reload() }
-        .overlay(alignment: .top) {
-            if store.hasNewContent {
-                NewContentBanner { Task { await store.acceptNewContent() } }
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+            .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
+                guard note.object as? String == store.channel.id else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo("feed-top", anchor: .top)
+                }
+                Task { await store.reload() }
             }
         }
     }

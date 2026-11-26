@@ -1,6 +1,70 @@
 import SwiftUI
 import UIKit
 
+extension Notification.Name {
+    /// 双击当前底部 Tab：object 为频道 id（String）；设置页双击不发。
+    static let jdTabDoubleTap = Notification.Name("jdTabDoubleTap")
+}
+
+/// 拦截底部 Tab 点击：重复点当前 tab 时单击不做任何事（系统默认会 pop 到根），
+/// 双击则发通知让列表置顶并刷新。切换其它 tab 保持系统默认行为。
+final class TabTapController: NSObject, UITabBarControllerDelegate {
+    private var lastIndex = -1
+    private var lastTime: TimeInterval = 0
+
+    func tabBarController(_ tabBarController: UITabBarController,
+                          shouldSelect viewController: UIViewController) -> Bool {
+        guard let vcs = tabBarController.viewControllers,
+              let idx = vcs.firstIndex(of: viewController) else { return true }
+        let now = Date().timeIntervalSince1970
+        if tabBarController.selectedViewController === viewController {
+            if idx == lastIndex, now - lastTime < 0.35 {
+                lastTime = 0
+                // 前 N 个 tab 对应 Channel.all，最后一个是设置页。
+                if idx < Channel.all.count {
+                    NotificationCenter.default.post(
+                        name: .jdTabDoubleTap, object: Channel.all[idx].id
+                    )
+                }
+            } else {
+                lastIndex = idx
+                lastTime = now
+            }
+            return false
+        }
+        lastIndex = -1
+        lastTime = 0
+        return true
+    }
+}
+
+/// 把上面的 delegate 挂到 SwiftUI TabView 底层的 UITabBarController 上。
+struct TabDelegateHost: UIViewControllerRepresentable {
+    let controller: TabTapController
+
+    func makeUIViewController(context: Context) -> TabDelegateHostVC {
+        TabDelegateHostVC(controller: controller)
+    }
+
+    func updateUIViewController(_ uiViewController: TabDelegateHostVC, context: Context) {}
+}
+
+final class TabDelegateHostVC: UIViewController {
+    let controller: TabTapController
+
+    init(controller: TabTapController) {
+        self.controller = controller
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        tabBarController?.delegate = controller
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var history: HistoryStore
@@ -67,10 +131,12 @@ struct ContentView: View {
                 ForEach(Channel.all) { channel in
                     Tab(channel.title, systemImage: channel.symbol, value: AppTab.channel(channel)) {
                         navigationContent(for: channel)
+                            .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                     }
                 }
                 Tab("设置", systemImage: "gearshape.fill", value: AppTab.settings) {
                     settingsTab
+                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                 }
                 .badge(notices.unread > 0 ? Text("\(notices.unread)") : nil)
             }
@@ -78,12 +144,14 @@ struct ContentView: View {
             TabView(selection: $ui.selected) {
                 ForEach(Channel.all) { channel in
                     navigationContent(for: channel)
+                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                         .tabItem {
                             Label(channel.title, systemImage: channel.symbol)
                         }
                         .tag(AppTab.channel(channel))
                 }
-                settingsTab
+                    settingsTab
+                        .background(TabDelegateHost(controller: ui.tabTap).frame(width: 0, height: 0))
                     .tabItem {
                         Label("设置", systemImage: "gearshape.fill")
                     }

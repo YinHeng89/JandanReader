@@ -11,6 +11,8 @@ enum AppTab: Hashable {
 }
 
 final class ContentViewState: ObservableObject {
+    /// 底部 Tab 点击拦截（单击无动作 / 双击置顶刷新）。
+    let tabTap = TabTapController()
     @Published var selected: AppTab = .channel(.home)
     @Published var showShare = false
     @Published var showAccount = false

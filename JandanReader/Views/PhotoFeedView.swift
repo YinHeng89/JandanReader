@@ -47,41 +47,52 @@ struct PhotoFeedView: View {
     }
 
     private var list: some View {
-        List {
-            ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                VStack(alignment: .leading, spacing: 0) {
-                    PhotoRow(
-                        item: item,
-                        expanded: store.expandedCommentID == item.id,
-                        onOpen: { store.push(.feed(item)) },
-                        onComments: { store.toggleInlineComments(for: item) },
-                        onVote: { like in
-                            Task { await store.vote(item: item, like: like) }
-                        },
-                        voteKind: store.voteKind(item.id),
-                        onProfile: item.authorID.map { id in
-                            { store.push(.user(id, item.author)) }
-                        },
-                        onNotice: { store.showToast($0) }
-                    )
-                    if store.expandedCommentID == item.id {
-                        InlineCommentsView(item: item, store: store)
+        ScrollViewReader { proxy in
+            List {
+                // 双击 Tab 时的置顶锚点。
+                Color.clear.frame(height: 0).id("feed-top")
+                ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                    VStack(alignment: .leading, spacing: 0) {
+                        PhotoRow(
+                            item: item,
+                            expanded: store.expandedCommentID == item.id,
+                            onOpen: { store.push(.feed(item)) },
+                            onComments: { store.toggleInlineComments(for: item) },
+                            onVote: { like in
+                                Task { await store.vote(item: item, like: like) }
+                            },
+                            voteKind: store.voteKind(item.id),
+                            onProfile: item.authorID.map { id in
+                                { store.push(.user(id, item.author)) }
+                            },
+                            onNotice: { store.showToast($0) }
+                        )
+                        if store.expandedCommentID == item.id {
+                            InlineCommentsView(item: item, store: store)
+                        }
                     }
+                    // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
+                    .listRowSeparator(.hidden)
+                    .onAppear { prefetchIfNeeded(index: index) }
                 }
-                // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
-                .listRowSeparator(.hidden)
-                .onAppear { prefetchIfNeeded(index: index) }
+                loadMoreSection
             }
-            loadMoreSection
-        }
-        .listStyle(.plain)
-        .refreshable { await store.reload() }
-        .overlay(alignment: .top) {
-            if store.hasNewContent {
-                NewContentBanner { Task { await store.acceptNewContent() } }
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+            .listStyle(.plain)
+            .refreshable { await store.reload() }
+            .overlay(alignment: .top) {
+                if store.hasNewContent {
+                    NewContentBanner { Task { await store.acceptNewContent() } }
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .jdTabDoubleTap)) { note in
+                guard note.object as? String == store.channel.id else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo("feed-top", anchor: .top)
+                }
+                Task { await store.reload() }
             }
         }
     }
