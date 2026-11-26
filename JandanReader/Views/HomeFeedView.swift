@@ -153,7 +153,7 @@ struct HomeFeedView: View {
     }
 }
 
-/// 首页单行（方案 C 大图卡片）：标题 + 分数 / 宽幅图 / 摘要 / 吐槽预览。
+/// 首页单行（方案 B 三行版）：标题一行 / 缩略图+简介一行 / 吐槽预览单独一行。
 private struct HomeRow: View {
     let item: JDFeedItem
     @EnvironmentObject private var settings: AppSettings
@@ -161,40 +161,46 @@ private struct HomeRow: View {
     private var thumbnailURL: URL? {
         guard let raw = item.imageURL else { return nil }
         let fixed = raw.hasPrefix("http:") ? "https:" + raw.dropFirst(5) : raw
-        guard let url = URL(string: fixed) else { return nil }
-        // 大图卡片需要清晰版本：thumb180 → mw1024，非站点标准路径保持原样。
-        return JDHTML.displayURL(url, thumbnail: false)
+        return URL(string: fixed)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // 第一行：标题单行，分数在右侧，不额外占行。
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(item.title)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
                 Text("\(item.score)")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
             }
 
-            if let url = thumbnailURL {
-                ArticleThumbnail(url: url)
+            // 第二行：站点缩略图 + 简介。
+            HStack(alignment: .top, spacing: 10) {
+                if let url = thumbnailURL {
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    }
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                if !item.body.isEmpty {
+                    Text(item.body)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(settings.cleanMode ? 3 : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
 
-            if !item.body.isEmpty {
-                Text(item.body)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(settings.cleanMode ? 3 : 2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
+            // 第三行：吐槽预览独立成行。
             if let nickname = item.tucaoNickname, !nickname.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     if let url = JDAPI.avatarURL(item.tucaoAvatar) {
                         CachedAsyncImage(url: url) { image in
                             image.resizable().scaledToFill()
@@ -205,33 +211,11 @@ private struct HomeRow: View {
                     Text("\(nickname): \(item.tucaoContent ?? "")")
                         .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
             }
         }
         .padding(.vertical, 8)
-    }
-}
-
-/// 文章卡片大图：固定高度占位 + scaledToFit 完整显示。
-/// 固定高度是必要的：异步加载后比例变化会让 List 行高重算，导致下一行盖到图片上。
-private struct ArticleThumbnail: View {
-    let url: URL
-    @StateObject private var loader = CachedImageLoader()
-
-    var body: some View {
-        Group {
-            if let ui = loader.image {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Color(.secondarySystemBackground)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .task(id: url.absoluteString) { await loader.load(url) }
     }
 }
 
