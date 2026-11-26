@@ -179,20 +179,27 @@ private struct CaptchaView: View {
     var body: some View {
         Group {
             if let image = imageState.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .contentShape(Rectangle())
-                    .onTapGesture { point in
-                        let size = image.size
-                        let normalized = CGPoint(
-                            x: point.x / size.width,
-                            y: point.y / size.height
-                        )
-                        Task { _ = await onTap(normalized) }
-                    }
+                // 用 GeometryReader 的真实显示尺寸归一化：onTapGesture 的 point 是视图坐标，
+                // 不是原图像素坐标。原来除以 image.size（360x240）而视图撑满屏宽，坐标全错，
+                // 服务端一直判验证失败并静默换图，看起来像"点不了"。
+                GeometryReader { geo in
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .contentShape(Rectangle())
+                        .onTapGesture { point in
+                            let size = geo.size
+                            guard size.width > 0, size.height > 0 else { return }
+                            let normalized = CGPoint(
+                                x: point.x / size.width,
+                                y: point.y / size.height
+                            )
+                            Task { _ = await onTap(normalized) }
+                        }
+                }
+                .aspectRatio(image.size.width / image.size.height, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 Color(.secondarySystemBackground)
                     .frame(height: 120)

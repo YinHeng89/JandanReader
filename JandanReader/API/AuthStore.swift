@@ -30,8 +30,9 @@ final class AuthStore: ObservableObject {
 
     // MARK: 图选验证码
 
-    func loadCaptcha() async {
-        message = nil
+    /// - parameter keepMessage: 验证失败后换图时保留错误提示，否则用户不知道点没点中。
+    func loadCaptcha(keepMessage: Bool = false) async {
+        if !keepMessage { message = nil }
         captcha = nil
         captchaVerified = false
         do {
@@ -56,8 +57,9 @@ final class AuthStore: ObservableObject {
             captchaVerified = true
             return true
         } catch {
-            message = error.localizedDescription
-            await loadCaptcha()
+            message = "验证未通过，请重新点击：\(error.localizedDescription)"
+            // 验证失败后必须换新图（旧图已被服务端作废），但保留提示让用户知道没点中。
+            await loadCaptcha(keepMessage: true)
             return false
         }
     }
