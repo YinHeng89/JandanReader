@@ -45,6 +45,10 @@ struct InlineAnimatedImageView: View {
                 }
             }
         }
+        // 高度交给 SwiftUI 的 aspectRatio 决定，而不是 UIView 的 intrinsicContentSize：
+        // List 会缓存行高，UIView 异步改 intrinsic 不会触发行高重算，下一行会盖到图片上。
+        // aspect 参数为 宽/高，loader.aspect 是 高/宽，故取倒数。
+        .aspectRatio(loader.aspect > 0 ? 1 / loader.aspect : 1, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .onTapGesture {
@@ -63,6 +67,13 @@ final class InlineImageLoader: ObservableObject {
     /// 动画是否已在显示（mp4 或逐帧 GIF 已就位）。
     @Published var isPlaying = false
     @Published var isLoadingAnimation = false
+    /// 当前图片的 高/宽，SwiftUI 用它算出确定高度，避免 List 行高缓存错位。
+    @Published var aspect: CGFloat = 0
+
+    func setAspect(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        aspect = size.height / size.width
+    }
 
     func requestPlay() {
         guard !playRequested else { return }
@@ -224,9 +235,11 @@ struct InlineImageContainer: UIViewRepresentable {
             animatedApplied = false
             playbackStarted = false
             loader.reset()
+            loader.aspect = 0
             loader.image = nil
             loader.phase = .loading
             view.image = nil
+            view.onSizeChange = nil
             view.stopVideo()
 
             if JDHTML.isGIF(url) {
@@ -358,6 +371,9 @@ struct InlineImageContainer: UIViewRepresentable {
             guard gen == generation else { return }
             animatedApplied = true
             hasImage = true
+            view.onSizeChange = { [weak self] size in
+                Task { @MainActor [weak self] in self?.loader.setAspect(size) }
+            }
             view.playVideo(video)
             loader.phase = .loaded
             loader.markPlaying()
@@ -406,6 +422,7 @@ struct InlineImageContainer: UIViewRepresentable {
             hasImage = true
             view.image = image
             loader.image = image
+            loader.setAspect(image.size)
             loader.phase = .loaded
         }
 
@@ -425,6 +442,8 @@ final class FittingImageView: UIView {
     private var loopObserver: NSObjectProtocol?
     private var sizeObservation: NSKeyValueObservation?
     private var aspect: CGFloat = 0
+    /// 视频真实尺寸到位后通知外层更新 SwiftUI 布局高度。
+    var onSizeChange: ((CGSize) -> Void)?
 
     var image: UIImage? {
         didSet {
@@ -481,6 +500,7 @@ final class FittingImageView: UIView {
                 self.aspect = size.height / size.width
                 self.invalidateIntrinsicContentSize()
                 self.setNeedsLayout()
+                self.onSizeChange?(size)
             }
         }
         player.play()
@@ -492,6 +512,7 @@ final class FittingImageView: UIView {
         }
         loopObserver = nil
         sizeObservation = nil
+        onSizeChange = nil
         player?.pause()
         player = nil
         playerLayer?.removeFromSuperlayer()
