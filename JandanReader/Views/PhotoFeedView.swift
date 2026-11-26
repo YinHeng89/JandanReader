@@ -1,0 +1,373 @@
+import SwiftUI
+
+/// 无聊图 / 女装频道：对齐站点官方图片流布局——
+/// 每条 = 用户行（点进详情） / 正文文字 / 完整图片（GIF 播放、长按分享） / 评论数（行内展开）。
+struct PhotoFeedView: View {
+    @ObservedObject var store: FeedStore
+    @EnvironmentObject private var banned: BannedStore
+    @EnvironmentObject private var settings: AppSettings
+    @StateObject private var sentinel = LoadMoreSentinel()
+
+    private var visibleItems: [JDFeedItem] {
+        store.items.filter { !banned.isBlocked(userID: $0.authorID, nickname: $0.author) }
+    }
+
+    var body: some View {
+        Group {
+            if store.isLoading && store.items.isEmpty {
+                ProgressView("正在加载 \(store.channel.title)…").tint(Color.accentColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let message = store.errorMessage, store.items.isEmpty {
+                errorView(message)
+            } else {
+                list
+            }
+        }
+        .task { await store.load() }
+    }
+
+    private var list: some View {
+        List {
+            ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                VStack(alignment: .leading, spacing: 0) {
+                    PhotoRow(
+                        item: item,
+                        expanded: store.expandedCommentID == item.id,
+                        onOpen: { store.push(.feed(item)) },
+                        onComments: { store.toggleInlineComments(for: item) },
+                        onVote: { like in
+                            Task { await store.vote(item: item, like: like) }
+                        },
+                        voteKind: store.voteKind(item.id)
+                    )
+                    if store.expandedCommentID == item.id {
+                        InlineCommentsView(item: item, store: store)
+                    }
+                }
+                // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
+                .listRowSeparator(.hidden)
+                .onAppear { prefetchIfNeeded(index: index) }
+            }
+            loadMoreSection
+        }
+        .listStyle(.plain)
+        .refreshable { await store.reload() }
+    }
+
+    /// 距离底部还有 4 条时就开始取下一页，滚动时不再等网。
+    private func prefetchIfNeeded(index: Int) {
+        guard index >= visibleItems.count - 4 else { return }
+        triggerLoadMore()
+    }
+
+    @ViewBuilder
+    private var loadMoreSection: some View {
+        if !store.items.isEmpty {
+            Section {
+                loadTrigger
+            }
+        }
+    }
+
+    /// 滚动到底部时自动翻页，不需要点按钮。
+    @ViewBuilder
+    private var loadTrigger: some View {
+        Group {
+            if store.isLoadingMore {
+                HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
+            } else if store.cursor != nil {
+                if store.errorMessage != nil {
+                    VStack(spacing: 4) {
+                        Text("加载失败，上滑重试").font(.caption).foregroundStyle(.secondary)
+                        Button("重试") { triggerLoadMore() }
+                            .font(.caption).buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
+                }
+            } else {
+                Text("已经到底了").font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .onAppear(perform: handleTriggerAppear)
+        .onDisappear(perform: handleTriggerDisappear)
+        .onChange(of: store.items.count) { _, _ in handleItemsCountChange() }
+    }
+
+    private func handleTriggerAppear() {
+        sentinel.visible = true
+        triggerLoadMore()
+    }
+
+    private func handleTriggerDisappear() { sentinel.visible = false }
+
+    private func handleItemsCountChange() {
+        // 新一页不足一屏时 sentinel 不会重新出现，数据变化后补一次触发。
+        if sentinel.visible { triggerLoadMore() }
+    }
+
+    private func triggerLoadMore() {
+        guard store.cursor != nil, !store.isLoadingMore else { return }
+        Task { await store.loadMore() }
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark").font(.system(size: 30)).foregroundStyle(Color.accentColor)
+            Text("加载失败").font(.headline)
+            Text(message).font(.caption).foregroundStyle(.secondary)
+            Button("重试") { Task { await store.reload() } }
+                .buttonStyle(.borderedProminent).tint(Color.accentColor)
+        }
+    }
+}
+
+/// 单条图片内容：作者元信息 / 正文大图 / 互动数据。
+private struct PhotoRow: View {
+    let item: JDFeedItem
+    let expanded: Bool
+    let onOpen: () -> Void
+    let onComments: () -> Void
+    let onVote: (Bool) -> Void
+    /// 当前用户的投票方向：true=赞，false=踩，nil=未投。
+    let voteKind: Bool?
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var banned: BannedStore
+    @StateObject private var share = ShareState()
+
+    /// 「显示缩略图」开启用列表 mw600，关闭用原图 mw1024 / large GIF。
+    private var images: [URL] {
+        JDHTML.imageURLs(in: item.body).map { JDHTML.displayURL($0, thumbnail: settings.cleanMode) }
+    }
+    private var text: String { JDHTML.plain(item.body) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            content
+
+            VStack(spacing: 12) {
+                HStack(spacing: 18) {
+                    Spacer(minLength: 0)
+                    Button { onVote(true) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.thumbsup")
+                            Text("\(item.positive)").monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(voteKind != nil)
+                    .foregroundStyle(voteKind == true ? Color.accentColor : Color.secondary)
+                    .accessibilityIdentifier("feed-up-\(item.id)")
+                    Button { onVote(false) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.thumbsdown")
+                            Text("\(item.negative)").monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(voteKind != nil)
+                    .foregroundStyle(voteKind == false ? Color.accentColor : Color.secondary)
+                    .accessibilityIdentifier("feed-down-\(item.id)")
+                    Button(action: onComments) {
+                        Label("\(item.commentCount)", systemImage: "bubble.left")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(expanded ? Color.accentColor : Color(.secondaryLabel))
+                    .accessibilityLabel("评论 \(item.commentCount) 条，点击\(expanded ? "收起" : "展开")")
+                }
+                .font(.system(size: 12))
+
+                // 位置与长度固定的分隔线，展开评论时不会被顶走。
+                Divider()
+            }
+        }
+        .padding(.vertical, 10)
+        .contextMenu {
+            if let url = images.first {
+                Button {
+                    Task { await share.prepareOriginal(from: url) }
+                } label: {
+                    Label("分享图片", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button(action: onOpen) {
+                Label("查看详情", systemImage: "doc.text")
+            }
+            if !item.author.isEmpty {
+                Button(role: .destructive) {
+                    banned.block(userID: item.authorID, nickname: item.author)
+                } label: {
+                    Label("屏蔽用户", systemImage: "hand.raised.slash")
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { share.item != nil },
+            set: { if !$0 { share.item = nil } }
+        )) {
+            if let item = share.item {
+                ShareSheet(activityItems: [item])
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // 用户那一行是详情入口；图片完整显示，长按分享。
+            Button(action: onOpen) {
+                HStack(spacing: 6) {
+                    if let avatar = item.avatar, let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                        AsyncImage(url: url) { phase in
+                            if case .success(let image) = phase { image.resizable().scaledToFill() }
+                            else { Color(.secondarySystemBackground) }
+                        }
+                        .frame(width: 22, height: 22)
+                        .clipShape(Circle())
+                    }
+                    Text(item.author.isEmpty ? "匿名" : item.author)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(item.date.jdShortDate)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    Text("#\(item.id)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("打开详情")
+
+            if !text.isEmpty {
+                Text(text)
+                    .font(.system(size: 14 * settings.fontScale / 100))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !images.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(images, id: \.absoluteString) { url in
+                        InlineAnimatedImageView(url: url)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 行内吐槽区：首次展开才请求 /api/tucao/list/{评论ID}。
+private struct InlineCommentsView: View {
+    let item: JDFeedItem
+    @ObservedObject var store: FeedStore
+    @EnvironmentObject private var banned: BannedStore
+
+    private var loaded: [JDComment]? {
+        store.inlineComments[item.id]?.filter {
+            !banned.isBlocked(userID: $0.user_id, nickname: $0.author)
+        }
+    }
+    private var isLoading: Bool { store.inlineLoadingIDs.contains(item.id) }
+    private var message: String? { store.inlineErrors[item.id] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isLoading && loaded == nil {
+                HStack(spacing: 6) {
+                    ProgressView().tint(Color.accentColor)
+                    Text("评论加载中…").font(.caption).foregroundStyle(.secondary)
+                }
+            } else if let message {
+                HStack(spacing: 8) {
+                    Text("评论加载失败：\(message)")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Button("重试") { Task { await store.loadInlineComments(for: item) } }
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                }
+            } else if let loaded, !loaded.isEmpty {
+                Text("评论 · \(loaded.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(loaded) { comment in
+                    InlineCommentRow(
+                        comment: comment,
+                        onVote: { like in
+                            Task { await store.voteInline(commentID: comment.id, like: like) }
+                        },
+                        voteKind: store.voteKind(comment.id)
+                    )
+                }
+            } else {
+                Text("暂无评论")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+    }
+}
+
+/// 行内吐槽行：与详情页评论行同布局——作者 / 地区 / 日期 / 点赞同一行，正文在下。
+private struct InlineCommentRow: View {
+    let comment: JDComment
+    let onVote: (Bool) -> Void
+    let voteKind: Bool?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                if let avatar = comment.avatar_ref, !avatar.isEmpty,
+                   let url = URL(string: avatar.hasPrefix("/") ? "https://jandan.net" + avatar : avatar) {
+                    AsyncImage(url: url) { phase in
+                        if case .success(let image) = phase { image.resizable().scaledToFill() }
+                        else { Color(.secondarySystemBackground) }
+                    }
+                    .frame(width: 22, height: 22)
+                    .clipShape(Circle())
+                }
+                Text(comment.author ?? "匿名")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if let location = comment.ip_location, !location.isEmpty {
+                    Text(location).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                if let date = comment.date_gmt {
+                    Text(date.jdShortDate).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 12) {
+                    Button { onVote(true) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.thumbsup")
+                            Text("\(comment.vote_positive ?? 0)").monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(voteKind != nil)
+                    .foregroundStyle(voteKind == true ? Color.accentColor : Color.secondary)
+                    .accessibilityIdentifier("inline-up-\(comment.id)")
+                    Button { onVote(false) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.thumbsdown")
+                            Text("\(comment.vote_negative ?? 0)").monospacedDigit()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(voteKind != nil)
+                    .foregroundStyle(voteKind == false ? Color.accentColor : Color.secondary)
+                    .accessibilityIdentifier("inline-down-\(comment.id)")
+                }
+                .font(.caption2.weight(.semibold))
+            }
+            RichText(html: comment.content ?? "", baseFont: 0.85)
+        }
+        .padding(.vertical, 10)
+    }
+}
