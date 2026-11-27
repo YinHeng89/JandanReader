@@ -14,8 +14,15 @@ struct InlineAnimatedImageView: View {
     private var isGIF: Bool { JDHTML.isGIF(url) }
 
     var body: some View {
-        ZStack {
+        // 宽度撑满列表可用宽度（≈屏幕宽），高度按图片真实比例算，完整显示不裁剪。
+        // 旧写法只给 ZStack 挂 .aspectRatio(.fit)：UIViewRepresentable 没有
+        // intrinsicContentSize，ZStack 会按自己的 ideal size 收缩，竖图只占六成宽度。
+        // 现在让 representable 明确撑满 ZStack，再由外层 aspectRatio + maxWidth 定尺寸。
+        // aspect 参数为 宽/高，loader.aspect 是 高/宽，故取倒数。
+        let ratio = loader.aspect > 0 ? 1 / loader.aspect : 1
+        return ZStack {
             InlineImageContainer(url: url, thumbnail: settings.useThumbnails, loader: loader)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if loader.phase == .loading && loader.image == nil {
                 ProgressView().tint(Color.accentColor)
@@ -24,7 +31,6 @@ struct InlineAnimatedImageView: View {
                     Image(systemName: "photo").foregroundStyle(.tertiary)
                     Text("图片加载失败").font(.caption).foregroundStyle(.secondary)
                 }
-                .frame(height: 120)
             }
 
             // GIF 未播放时叠一个「点击播放」标记，提示可点开动画。
@@ -45,10 +51,8 @@ struct InlineAnimatedImageView: View {
                 }
             }
         }
-        // 高度交给 SwiftUI 的 aspectRatio 决定，而不是 UIView 的 intrinsicContentSize：
-        // List 会缓存行高，UIView 异步改 intrinsic 不会触发行高重算，下一行会盖到图片上。
-        // aspect 参数为 宽/高，loader.aspect 是 高/宽，故取倒数。
-        .aspectRatio(loader.aspect > 0 ? 1 / loader.aspect : 1, contentMode: .fit)
+        .aspectRatio(ratio, contentMode: .fill)
+        .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .onTapGesture {
@@ -149,35 +153,57 @@ final class InlineImageCache {
     }
 }
 
-/// 分享面板的内容。下载原图后给系统分享真实的图片数据，而不是一个链接。
+/// 分享面板的内容：下载当前条目的**所有**原图，一次交给系统分享面板。
+/// 旧实现只取 images.first，一条里有多张图时永远只能分享第一张。
 @MainActor
 final class ShareState: ObservableObject {
-    @Published var item: Any?
+    @Published var items: [Any] = []
+    @Published private(set) var isPreparing = false
 
-    func prepareOriginal(from displayedURL: URL) async {
-        // 旧实现用 displayURL(thumbnail:false)，会把 large/xxx.jpg 改成
-        // mw1024/xxx.jpg —— 分享出去的其实是降采样图。统一走 originalURL 取站点原图。
+    func prepareOriginals(from displayedURLs: [URL]) async {
+        guard !displayedURLs.isEmpty, !isPreparing else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+
+        // 并发下载，但按原始顺序放进分享面板。
+        var ordered: [Any?] = Array(repeating: nil, count: displayedURLs.count)
+        await withTaskGroup(of: (Int, Any?).self) { group in
+            for (index, url) in displayedURLs.enumerated() {
+                group.addTask {
+                    let item = await Self.originalItem(for: url)
+                    return (index, item)
+                }
+            }
+            for await (index, item) in group { ordered[index] = item }
+        }
+        let prepared = ordered.compactMap { $0 }
+        guard !prepared.isEmpty else { return }
+        items = prepared
+    }
+
+    func clear() { items.removeAll() }
+
+    /// 单张原图下载：统一走 originalURL（旧的 displayURL(false) 会把 large
+    /// 换成 mw1024，分享出去的是降采样图）。GIF 写临时文件让面板按动图处理。
+    nonisolated private static func originalItem(for displayedURL: URL) async -> Any? {
         let original = JDHTML.originalURL(displayedURL)
         var request = URLRequest(url: original)
         request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(JDAPI.base + "/", forHTTPHeaderField: "Referer")
         guard let (data, response) = try? await ImageCache.session.data(for: request),
               let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode) else { return }
+              (200..<300).contains(http.statusCode) else { return nil }
         ImageCache.shared.storeCachedResponse(
             CachedURLResponse(response: http, data: data), for: request
         )
 
-        // GIF 写成临时文件，分享面板会按动图处理；静态图直接分享 UIImage。
         if String(data: data.prefix(3), encoding: .ascii) == "GIF" {
             let file = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString + ".gif")
-            if (try? data.write(to: file)) != nil { item = file }
-        } else if let image = UIImage(data: data) {
-            item = image
-        } else {
-            item = data
+            return (try? data.write(to: file)) != nil ? file : nil
         }
+        if let image = UIImage(data: data) { return image }
+        return data
     }
 }
 
@@ -285,6 +311,18 @@ struct InlineImageContainer: UIViewRepresentable {
 
         init(loader: InlineImageLoader) { self.loader = loader }
 
+        /// SwiftUI 不允许在视图更新（makeUIView / updateUIView）期间发布 @Published 变更，
+        /// 否则 Xcode 会刷「Publishing changes from within view updates is not allowed」。
+        /// 所有 loader 写入统一延后到当前事务之后，网络回调仍排在 load() 的复位之后，
+        /// generation 校验保证旧请求不会写回复用的行。
+        @MainActor
+        private func publish(_ change: @escaping (InlineImageLoader) -> Void) {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                change(self.loader)
+            }
+        }
+
         func cancelAll() {
             placeholderTask?.cancel()
             mainTask?.cancel()
@@ -309,10 +347,12 @@ struct InlineImageContainer: UIViewRepresentable {
             hasImage = false
             animatedApplied = false
             playbackStarted = false
-            loader.reset()
-            loader.aspect = 0
-            loader.image = nil
-            loader.phase = .loading
+            publish {
+                $0.reset()
+                $0.aspect = 0
+                $0.image = nil
+                $0.phase = .loading
+            }
             view.image = nil
             view.onSizeChange = nil
             view.stopVideo()
@@ -453,8 +493,10 @@ struct InlineImageContainer: UIViewRepresentable {
             let cached = InlineVideoCache.localURL(for: video)
             if cached == nil { InlineVideoCache.prefetch(video) }
             view.playVideo(cached ?? video)
-            loader.phase = .loaded
-            loader.markPlaying()
+            publish {
+                $0.phase = .loaded
+                $0.markPlaying()
+            }
         }
 
         nonisolated private static func decode(_ data: Data) -> UIImage? {
@@ -518,14 +560,16 @@ struct InlineImageContainer: UIViewRepresentable {
         private func apply(_ image: UIImage, into view: FittingImageView) {
             hasImage = true
             view.image = image
-            loader.image = image
-            loader.setAspect(image.size)
-            loader.phase = .loaded
+            publish {
+                $0.image = image
+                $0.setAspect(image.size)
+                $0.phase = .loaded
+            }
         }
 
         private func markFailureIfNeeded(gen: Int) {
             guard gen == generation, !hasImage else { return }
-            loader.phase = .failed
+            publish { $0.phase = .failed }
         }
     }
 }

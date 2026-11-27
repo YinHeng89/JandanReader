@@ -271,11 +271,13 @@ private struct PhotoRow: View {
         }
         .padding(.vertical, 10)
         .contextMenu {
-            if let url = images.first {
+            if !images.isEmpty {
                 Button {
-                    Task { await share.prepareOriginal(from: url) }
+                    // 一条里可能有多张图，全部下载原图后一次交给分享面板。
+                    Task { await share.prepareOriginals(from: images) }
                 } label: {
-                    Label("分享图片", systemImage: "square.and.arrow.up")
+                    Label(images.count > 1 ? "分享图片（\(images.count) 张）" : "分享图片",
+                          systemImage: "square.and.arrow.up")
                 }
             }
             Button(action: onOpen) {
@@ -305,12 +307,10 @@ private struct PhotoRow: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { share.item != nil },
-            set: { if !$0 { share.item = nil } }
+            get: { !share.items.isEmpty },
+            set: { if !$0 { share.clear() } }
         )) {
-            if let item = share.item {
-                ShareSheet(activityItems: [item])
-            }
+            ShareSheet(activityItems: share.items)
         }
         .confirmationDialog("举报原因", isPresented: $reportUI.showReport) {
             Button("违法违规") { submitReport(type: 1, reason: "违法违规") }

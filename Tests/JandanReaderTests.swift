@@ -94,6 +94,27 @@ final class JDHTMLTests: XCTestCase {
         } else { XCTFail("第 4 块应为链接") }
         if case .text(let value) = blocks[4] { XCTAssertEqual(value, "后") } else { XCTFail("第 5 块应为文字") }
     }
+
+    /// 一条评论可以有多张图；分享必须拿到全部 URL 且保持原始顺序。
+    func testMultipleImagesAreAllCollectedInOrder() {
+        let html = """
+        <p>文字</p><img src="https://img.toto.im/mw600/first.jpg"><br/>
+        <img data-original="https://img.toto.im/mw600/second.jpg">
+        <img src="https://img.toto.im/mw600/a.gif.webp">
+        """
+        let urls = JDHTML.imageURLs(in: html)
+        XCTAssertEqual(urls.map(\.absoluteString), [
+            "https://img.toto.im/mw600/first.jpg",
+            "https://img.toto.im/mw600/second.jpg",
+            "https://img.toto.im/mw600/a.gif.webp",
+        ])
+        // 逐张取原图：静态图换 large，GIF 换动画版 large/xxx.gif。
+        XCTAssertEqual(urls.map { JDHTML.originalURL($0).absoluteString }, [
+            "https://img.toto.im/large/first.jpg",
+            "https://img.toto.im/large/second.jpg",
+            "https://img.toto.im/large/a.gif",
+        ])
+    }
 }
 
 final class JDAPITests: XCTestCase {
