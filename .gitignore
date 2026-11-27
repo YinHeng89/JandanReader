@@ -1,6 +1,8 @@
 # Xcode
 build/
 build-device/
+build-*/
+# build-test / build-shots 等临时构建目录
 DerivedData/
 *.xcodeproj/project.xcworkspace/
 *.xcodeproj/xcuserdata/
