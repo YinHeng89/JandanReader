@@ -5,12 +5,12 @@ import SwiftUI
 /// 覆盖正文大图 / GIF / 缩略图 / 头像，滚动回看和重启后直接命中磁盘，不重复下载。
 enum ImageCache {
     static let shared: URLCache = {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let disk = caches.appendingPathComponent("jd_image_cache", isDirectory: true)
-        try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
+        // 旧实现把绝对路径传给 `diskPath:`；该参数是**相对 Caches 目录**的名字，
+        // 传绝对路径会创建出嵌套的奇怪目录。iOS 26 SDK 里 directoryURL: 版本的
+        // initializer 被标为不可用（__memoryCapacity），这里传相对目录名即可。
         return URLCache(memoryCapacity: 64 * 1024 * 1024,
                         diskCapacity: 512 * 1024 * 1024,
-                        diskPath: disk.path)
+                        diskPath: "jd_image_cache")
     }()
 
     /// 专用于静态图片请求的 session：带 User-Agent、复用上面的 URLCache。
@@ -23,19 +23,22 @@ enum ImageCache {
         return URLSession(configuration: config)
     }()
 
-    /// 缓存占用统计。URLCache 的 disk/memory usage 是公开 API，
-    /// 解码位图缓存（InlineImageCache）由 NSCache 自动回收，无法精确统计，只纳入清除范围。
+    /// 缓存占用统计。URLCache 的 disk/memory usage 是公开 API；
+    /// 解码位图由 NSCache 管理（淘汰无回调），只统计本次会话写入量的近似值。
     struct Usage {
         let memory: Int
         let disk: Int
+        let decoded: Int
 
-        static let zero = Usage(memory: 0, disk: 0)
+        static let zero = Usage(memory: 0, disk: 0, decoded: 0)
 
-        var total: Int { memory + disk }
+        var total: Int { memory + disk + decoded }
 
         var label: String {
             guard total > 0 else { return "暂无缓存" }
-            return "磁盘 \(Self.format(disk)) · 内存 \(Self.format(memory))"
+            var parts = ["磁盘 \(Self.format(disk))", "内存 \(Self.format(memory))"]
+            if decoded > 0 { parts.append("解码图约 \(Self.format(decoded))") }
+            return parts.joined(separator: " · ")
         }
 
         private static func format(_ bytes: Int) -> String {
@@ -49,14 +52,17 @@ enum ImageCache {
     /// 读取占用放后台：currentDiskUsage 会枚举缓存目录，避免设置页出现时卡主线程。
     static func readUsage() async -> Usage {
         await Task.detached(priority: .utility) {
-            Usage(memory: shared.currentMemoryUsage, disk: shared.currentDiskUsage)
+            Usage(memory: shared.currentMemoryUsage,
+                  disk: shared.currentDiskUsage,
+                  decoded: InlineImageCache.shared.usageBytes)
         }.value
     }
 
-    /// 清除磁盘 + 内存图片缓存，以及内存中的解码位图缓存。
+    /// 清除磁盘 + 内存图片缓存、解码位图缓存，以及 GIF 的 mp4 本地副本。
     static func clear() {
         shared.removeAllCachedResponses()
         InlineImageCache.shared.clear()
+        InlineVideoCache.clear()
     }
 }
 

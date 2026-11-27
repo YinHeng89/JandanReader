@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import WebKit
 
 /// 登录态：站点用 Cookie（HTTPCookieStorage.shared），本类只负责把当前用户拉出来。
 @MainActor
@@ -66,7 +67,8 @@ final class AuthStore: ObservableObject {
 
     // MARK: 登录
 
-    /// 密码按站点规则做 SHA3-256（CryptoJS outputLength=256, hex）
+    /// 密码按站点规则做 Keccak-256（CryptoJS `SHA3(...,{outputLength:256})`, hex）。
+    /// 注意不是 FIPS 202 SHA3-256，两者 domain separator 不同。
     func login(username: String, password: String) async -> Bool {
         guard !username.isEmpty, !password.isEmpty else {
             message = "请输入用户名和密码"
@@ -96,8 +98,33 @@ final class AuthStore: ObservableObject {
         return false
     }
 
+    /// 退出登录：服务端失败也必须清掉本地 Cookie，否则下次 refresh() 会把
+    /// 旧会话重新拉回来，界面显示「已退出」实际仍是登录态。
     func logout() async {
-        try? await JDAPI.postRaw("/api/member/logout", form: [:])
+        do {
+            try await JDAPI.postRaw("/api/member/logout", form: [:])
+            message = nil
+        } catch {
+            message = "退出登录失败：\(error.localizedDescription)（本地登录态已清除）"
+        }
+        await clearLoginCookies()
         user = nil
+        captcha = nil
+        captchaVerified = false
+    }
+
+    private func clearLoginCookies() async {
+        let storage = HTTPCookieStorage.shared
+        for cookie in storage.cookies ?? [] where cookie.domain.contains("jandan.net") {
+            storage.deleteCookie(cookie)
+        }
+        // 微信登录曾把 WKWebView 的 Cookie 同步过来；WebView 侧也要清，
+        // 否则下次打开扫码页会带着旧会话自动登录。
+        let store = WKWebsiteDataStore.default().httpCookieStore
+        for cookie in await store.allCookies() where cookie.domain.contains("jandan.net") {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                store.delete(cookie) { continuation.resume() }
+            }
+        }
     }
 }

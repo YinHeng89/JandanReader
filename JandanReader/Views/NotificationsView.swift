@@ -79,6 +79,21 @@ struct NotificationsView: View {
                 }
                 .padding(.vertical, 4)
             }
+            if store.hasMore {
+                HStack {
+                    Spacer()
+                    if store.isLoading {
+                        ProgressView().tint(Color.accentColor)
+                    } else {
+                        Button("加载更多") { Task { await store.loadMore() } }
+                            .font(.caption)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+            }
         }
         .listStyle(.plain)
         .refreshable { await store.load() }

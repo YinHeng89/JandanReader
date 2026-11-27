@@ -4,17 +4,19 @@ import SwiftUI
 struct UserProfileView: View {
     let userID: Int
     let nickname: String
+    /// 打开该用户的内容时落到哪个频道，由外壳显式注入。
+    let channel: Channel
 
     @StateObject private var store: UserProfileStore
     @StateObject private var ui = ProfileUIState()
-    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
     @EnvironmentObject private var router: FeedRouter
     @Environment(\.dismiss) private var dismiss
 
-    init(userID: Int, nickname: String) {
+    init(userID: Int, nickname: String, channel: Channel) {
         self.userID = userID
         self.nickname = nickname
+        self.channel = channel
         _store = StateObject(wrappedValue: UserProfileStore(userID: userID))
     }
 
@@ -158,7 +160,7 @@ struct UserProfileView: View {
             id: comment.id,
             title: comment.post_title ?? "详情",
             kind: "comment",
-            in: Channel.withID(settings.lastChannelID)
+            in: channel
         )
     }
 

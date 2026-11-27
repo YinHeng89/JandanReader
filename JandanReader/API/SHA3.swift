@@ -1,13 +1,20 @@
 import Foundation
 
-/// SHA3-256（Keccak-f[1600]，FIPS 202 domain separator 0x06）。
-/// 用于登录密码哈希；CryptoKit 不含 SHA3，且不想为此引入 SPM 依赖。
+/// 站点登录用的「SHA3-256」实为 **Keccak-256**（CryptoJS 版 SHA3）。
 ///
-/// 注意：CryptoJS 的 `SHA3(e, {outputLength:256})` 实际是旧 Keccak（domain 0x01），
-/// 与本实现结果不同。站点登录到底按哪种校验仍需抓包确认（代码审查 P0-1），
-/// 在确认前不要仅凭这段注释认定算法与站点一致。
+/// 证据（2026-11-26 抓站点 Nuxt bundle）：
+/// - 登录页 chunk `LDv1WFtq.js` 用 `D(W.value)` 处理密码；
+/// - `C1RStTSn.js` 末尾导出 `B(e)=z.default.SHA3(e,{outputLength:256}).toString(Hex)`；
+/// - 打包的 crypto-js `SHA3._doFinalize` 只在消息后追加 `0x01` 位并在块尾追加 `0x80`，
+///   **没有 FIPS 202 的 0x06 domain separator**，即旧 Keccak padding。
+/// 因此之前的 FIPS 202 实现（0x06）与站点校验结果必然不同，密码登录恒失败。
+///
+/// 本实现与 `CryptoJS.SHA3(text,{outputLength:256})` 逐字节一致：
+/// 空串 = c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470；
+/// "abc" = 4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45。
+/// CryptoKit 不含 Keccak，且不想为此引入 SPM 依赖，故自带实现。
 enum SHA3 {
-    private static let rate = 136 // 1088 bits / 8
+    private static let rate = 136 // (1600 - 2 * 256) / 8
     private static let rc: [UInt64] = [
         0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000,
         0x000000000000808B, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
@@ -27,13 +34,13 @@ enum SHA3 {
 
     static func sha256Hex(_ text: String) -> String {
         var bytes = Array(text.utf8)
-        // pad10*1：消息后追加 0x06，补零到 rate-1，最后追加 0x80。
-        // 若消息本身占满 rate-1 字节，只剩 1 字节空间，domain bits 与结束位
-        // 必须合并成单字节 0x86；分开写会多吸收一整块，长输入哈希全错。
+        // Keccak pad10*1：消息后追加 0x01，补零到 rate-1，最后追加 0x80。
+        // 若消息占满 rate-1 字节，只剩 1 字节空间，起始位与结束位必须合并成
+        // 单字节 0x81；分开写会多吸收一整块，长输入哈希全错。
         if bytes.count % rate == rate - 1 {
-            bytes.append(0x86) // 0x06 | 0x80
+            bytes.append(0x81) // 0x01 | 0x80
         } else {
-            bytes.append(0x06)
+            bytes.append(0x01)
             while bytes.count % rate != rate - 1 { bytes.append(0) }
             bytes.append(0x80)
         }

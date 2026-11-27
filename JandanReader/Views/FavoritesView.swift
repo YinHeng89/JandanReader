@@ -2,6 +2,9 @@ import SwiftUI
 
 /// 我的收藏：需登录，列表来自 /api/member/comment/favorites。
 struct FavoritesView: View {
+    /// 打开收藏内容时落到哪个频道，由外壳显式注入，不再猜 lastChannelID。
+    let channel: Channel
+
     @EnvironmentObject private var auth: AuthStore
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var settings: AppSettings
@@ -111,7 +114,7 @@ struct FavoritesView: View {
             id: id,
             title: entry.post_title ?? "详情",
             kind: "comment",
-            in: Channel.withID(settings.lastChannelID)
+            in: channel
         )
     }
 }

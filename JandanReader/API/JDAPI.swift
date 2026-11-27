@@ -2,10 +2,12 @@ import Foundation
 
 /// 煎蛋 REST API 封装。
 ///
-/// 两个实测要点：
+/// 三个实测要点：
 /// 1. 必须带正常 User-Agent，curl / 系统默认 UA 会被当成爬虫返回 data: null；
 /// 2. 登录态走 Cookie，URLSession.shared 默认使用 HTTPCookieStorage.shared，
-///    所以登录成功后全 App 自动共享，不需要手工搬运 token。
+///    所以登录成功后全 App 自动共享，不需要手工搬运 token；
+/// 3. 站点多数接口返回 `{code,msg,data}`（code 0 成功），但投票等老接口返回
+///    `{error,msg}`。所有写接口必须先做统一业务码校验，否则会出现「假成功」。
 enum JDAPI {
 
     static let base = "https://jandan.net"
@@ -40,6 +42,7 @@ enum JDAPI {
         case business(Int, String)
         case invalidImage
         case cancelled
+        case invalidResponse
 
         var errorDescription: String? {
             switch self {
@@ -47,6 +50,7 @@ enum JDAPI {
             case .business(_, let msg): return msg
             case .invalidImage: return "验证码图片无效"
             case .cancelled: return "已取消"
+            case .invalidResponse: return "服务端响应格式异常"
             }
         }
 
@@ -56,6 +60,118 @@ enum JDAPI {
             return code == 1 && msg.contains("投过票")
         }
     }
+
+    // MARK: - 统一业务码校验
+
+    /// 站点业务失败有几种信封，统一在这里判定：
+    /// `{code:非0,msg}` / `{error:非0|字符串,msg}` / `{success:false}` / `{status:"error"}`。
+    /// 裸数字、裸数组、纯文本不是错误信封，直接放行（check_notice 等接口用）。
+    enum JDResponse {
+        static func validate(_ data: Data) throws {
+            guard let json = try? JSONSerialization.jsonObject(with: data),
+                  let object = json as? [String: Any] else { return }
+
+            if let code = intValue(object["code"]) {
+                if code != 0 { throw APIError.business(code, message(object) ?? "请求失败") }
+                return
+            }
+            if let error = object["error"] {
+                if let code = intValue(error) {
+                    if code != 0 { throw APIError.business(code, message(object) ?? "请求失败") }
+                } else {
+                    let text = (error as? String) ?? message(object) ?? "请求失败"
+                    throw APIError.business(1, text)
+                }
+                return
+            }
+            if let success = object["success"] as? Bool, !success {
+                throw APIError.business(1, message(object) ?? "请求失败")
+            }
+            if let status = object["status"] as? String,
+               ["error", "fail", "failed"].contains(status.lowercased()) {
+                throw APIError.business(1, message(object) ?? "请求失败")
+            }
+        }
+
+        /// code 可能是 Int / NSNumber / 数字字符串。
+        static func intValue(_ value: Any?) -> Int? {
+            if let n = value as? Int { return n }
+            if let n = value as? NSNumber { return n.intValue }
+            if let s = value as? String { return Int(s) }
+            return nil
+        }
+
+        static func message(_ object: [String: Any]) -> String? {
+            for key in ["msg", "message", "error_msg"] {
+                if let s = object[key] as? String, !s.isEmpty { return s }
+            }
+            return nil
+        }
+    }
+
+    // MARK: - 请求基座
+
+    /// 所有请求的唯一出口：统一 User-Agent / Referer、HTTP 状态与业务码校验。
+    private static func rawRequest(
+        _ path: String,
+        method: String,
+        query: [String: String] = [:],
+        body: Data? = nil,
+        contentType: String? = nil
+    ) async throws -> Data {
+        guard var components = URLComponents(string: base + path) else {
+            throw APIError.invalidResponse
+        }
+        if !query.isEmpty {
+            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        guard let url = components.url else { throw APIError.invalidResponse }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(base + "/", forHTTPHeaderField: "Referer")
+        if let contentType { req.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        req.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+        try JDResponse.validate(data)
+        return data
+    }
+
+    /// 严格的 form-urlencoded 编码：非 ASCII 逐字节百分编码，不会失败，
+    /// 因此无需 `?? value` 兜底（旧实现会把明文参数拼进请求体造成注入风险）。
+    static func encodeForm(_ form: [String: String]) throws -> Data {
+        var parts: [String] = []
+        for (key, value) in form.sorted(by: { $0.key < $1.key }) {
+            parts.append("\(percentEncode(key))=\(percentEncode(value))")
+        }
+        return Data(parts.joined(separator: "&").utf8)
+    }
+
+    private static func percentEncode(_ text: String) -> String {
+        // 必须是纯 ASCII 白名单：CharacterSet.alphanumerics 包含 Unicode 字母
+        // （0xE4 = ä、0xE6 = æ…），会让 UTF-8 的高字节漏出去不被百分编码。
+        let allowed = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._*"
+        )
+        var out = ""
+        for byte in Array(text.utf8) {
+            let scalar = UnicodeScalar(byte)
+            if byte == 0x20 {
+                out.append("+")
+            } else if allowed.contains(scalar) {
+                out.append(Character(scalar))
+            } else {
+                out.append(String(format: "%%%02X", Int(byte)))
+            }
+        }
+        return out
+    }
+
+    // MARK: - GET / POST
 
     /// 统一 GET：返回 envelope.data，业务 code != 0 时抛错。
     static func get<T: Decodable>(
@@ -71,70 +187,74 @@ enum JDAPI {
         form: [String: String],
         as type: T.Type = T.self
     ) async throws -> T {
-        let body = form.map { key, value in
-            "\(key)=\(value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value)"
-        }.joined(separator: "&")
+        let body = try encodeForm(form)
         return try await request(
-            path, method: "POST", query: [:],
-            body: body.data(using: .utf8), as: type,
+            path, method: "POST", query: [:], body: body, as: type,
             contentType: "application/x-www-form-urlencoded"
         )
     }
 
+    /// 只关心成败的 form 请求：不再借道 AnyDecodable，避免老接口 `{error,msg}` 被当成成功。
     static func postRaw(_ path: String, form: [String: String]) async throws {
-        let _: AnyDecodable = try await post(path, form: form, as: AnyDecodable.self)
+        let body = try encodeForm(form)
+        _ = try await rawRequest(
+            path, method: "POST", body: body,
+            contentType: "application/x-www-form-urlencoded"
+        )
     }
 
-    /// 站点前端 apiFetch 默认用 JSON body，会员类接口用它更稳妥。
+    /// 发布 / 收藏 / 通知 / 偏好同步用 JSON body。
     static func postJSONRaw(_ path: String, body: [String: Any]) async throws {
-        var req = URLRequest(url: URL(string: base + path)!)
-        req.httpMethod = "POST"
-        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue(base + "/", forHTTPHeaderField: "Referer")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: req)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        if let envelope = try? decoder.decode(JDEnvelope<AnyDecodable>.self, from: data), envelope.code != 0 {
-            throw APIError.business(envelope.code, envelope.msg.isEmpty ? "请求失败" : envelope.msg)
-        }
-        guard (200..<300).contains(status) else { throw APIError.badStatus(status) }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        _ = try await rawRequest(path, method: "POST", body: data, contentType: "application/json")
     }
 
     /// 少数接口（check_notice）直接返回裸数字，不走 {code,data} 信封。
     static func getRaw(_ path: String) async throws -> Data {
-        var req = URLRequest(url: URL(string: base + path)!)
-        req.httpMethod = "GET"
-        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue(base + "/", forHTTPHeaderField: "Referer")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        guard (200..<300).contains(status) else { throw APIError.badStatus(status) }
-        return data
+        try await rawRequest(path, method: "GET")
     }
 
-    /// 投票等少数接口用 JSON body，响应是 {error, msg, comment_id} 而不是 JDEnvelope。
+    private static func request<T: Decodable>(
+        _ path: String,
+        method: String,
+        query: [String: String],
+        body: Data?,
+        as type: T.Type,
+        contentType: String? = nil
+    ) async throws -> T {
+        let data = try await rawRequest(
+            path, method: method, query: query, body: body, contentType: contentType
+        )
+
+        // 大多数接口：{code, msg, data: T}
+        if let typed = try? decoder.decode(JDEnvelope<T>.self, from: data),
+           typed.code == 0, let value = typed.data {
+            return value
+        }
+        // 吐槽、时间线等接口把字段直接放在顶层，没有 data 包裹。
+        if let root = try? decoder.decode(T.self, from: data) { return root }
+        // 业务码为 0 但 data 为空：只允许「不关心内容」的调用方通过。
+        if T.self == AnyDecodable.self, let empty = AnyDecodable(NSNull()) as? T {
+            return empty
+        }
+        throw APIError.invalidResponse
+    }
+
+    // MARK: - 投票 / 举报
+
+    /// 投票接口响应是 {error, msg, comment_id}，统一校验后再做一次类型兜底。
     static func vote(commentID: Int, like: Bool) async throws {
-        var req = URLRequest(url: URL(string: base + "/api/comment/vote")!)
-        req.httpMethod = "POST"
-        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue(base + "/", forHTTPHeaderField: "Referer")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
+        let body = try JSONSerialization.data(withJSONObject: [
             "comment_id": commentID,
             "like_type": like ? "pos" : "neg",
             "data_type": "comment",
         ])
-
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        let data = try await rawRequest(
+            "/api/comment/vote", method: "POST", body: body, contentType: "application/json"
+        )
+        if let result = try? decoder.decode(JDVoteResult.self, from: data), result.error != 0 {
+            throw APIError.business(result.error, result.msg ?? "投票失败")
         }
-        let result = try JSONDecoder().decode(JDVoteResult.self, from: data)
-        guard result.error == 0 else { throw APIError.business(result.error, result.msg ?? "投票失败") }
     }
 
     /// 举报评论：游客可调用，type 1=违法 / 2=色情 / 3=引战人身攻击。
@@ -214,9 +334,6 @@ enum JDAPI {
     static func getPrefs() async throws -> [String: Any]? {
         let data = try await getRaw("/api/member/prefs")
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        if let code = json?["code"] as? Int, code != 0 {
-            throw APIError.business(code, json?["msg"] as? String ?? "同步失败")
-        }
         if let envelope = json?["data"] as? [String: Any] {
             return envelope["prefs"] as? [String: Any]
         }
@@ -246,43 +363,6 @@ enum JDAPI {
     static func userTucaos(_ id: Int) async throws -> [JDComment] {
         let page: JDUserTucaos = try await get("/api/tucao/user/\(id)")
         return (page.list ?? []).map(\.asComment)
-    }
-
-    private static func request<T: Decodable>(
-        _ path: String,
-        method: String,
-        query: [String: String],
-        body: Data?,
-        as type: T.Type,
-        contentType: String? = nil
-    ) async throws -> T {
-        var components = URLComponents(string: base + path)!
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        var req = URLRequest(url: components.url!)
-        req.httpMethod = method
-        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(base + "/", forHTTPHeaderField: "Referer")
-        if let contentType { req.setValue(contentType, forHTTPHeaderField: "Content-Type") }
-        req.httpBody = body
-
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse else { throw APIError.badStatus(-1) }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
-
-        // 大多数接口：{code, msg, data: T}
-        if let typed = try? decoder.decode(JDEnvelope<T>.self, from: data),
-           typed.code == 0, let value = typed.data {
-            return value
-        }
-
-        // 吐槽等少数接口把字段直接放在顶层，没有 data 包裹。
-        let meta = try decoder.decode(JDEnvelope<AnyDecodable>.self, from: data)
-        guard meta.code == 0 else { throw APIError.business(meta.code, meta.msg) }
-        if let root = try? decoder.decode(T.self, from: data) { return root }
-        throw APIError.business(meta.code, "暂无数据")
     }
 }
 

@@ -15,7 +15,7 @@ struct InlineAnimatedImageView: View {
 
     var body: some View {
         ZStack {
-            InlineImageContainer(url: url, thumbnail: settings.cleanMode, loader: loader)
+            InlineImageContainer(url: url, thumbnail: settings.useThumbnails, loader: loader)
 
             if loader.phase == .loading && loader.image == nil {
                 ProgressView().tint(Color.accentColor)
@@ -106,6 +106,16 @@ final class InlineImageCache {
     static let shared = InlineImageCache()
 
     private let cache = NSCache<NSString, UIImage>()
+    private let lock = NSLock()
+    /// NSCache 淘汰不会回调，这里记录「本次会话写入量」，作为解码图占用的上界估计，
+    /// 供设置页缓存统计展示。
+    private var estimatedBytes = 0
+
+    var usageBytes: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return estimatedBytes
+    }
 
     private init() {
         // 关键：一张 mw1024 图片的 JPEG 只有几百 KB，解码位图却要 4~6MB；
@@ -124,10 +134,19 @@ final class InlineImageCache {
         // 解码位图约 4 字节/像素，动图再乘帧数，这是实际驻留内存的近似值。
         let frames = max(image.images?.count ?? 1, 1)
         let bytes = image.size.width * image.size.height * 4 * CGFloat(frames)
-        cache.setObject(image, forKey: url.absoluteString as NSString, cost: max(Int(bytes), 1))
+        let cost = max(Int(bytes), 1)
+        cache.setObject(image, forKey: url.absoluteString as NSString, cost: cost)
+        lock.lock()
+        estimatedBytes += cost
+        lock.unlock()
     }
 
-    func clear() { cache.removeAllObjects() }
+    func clear() {
+        cache.removeAllObjects()
+        lock.lock()
+        estimatedBytes = 0
+        lock.unlock()
+    }
 }
 
 /// 分享面板的内容。下载原图后给系统分享真实的图片数据，而不是一个链接。
@@ -136,16 +155,18 @@ final class ShareState: ObservableObject {
     @Published var item: Any?
 
     func prepareOriginal(from displayedURL: URL) async {
-        // GIF 的 mw600 版本是单帧静态图，分享必须取 large 动画原图。
-        let original: URL
-        if JDHTML.isGIF(displayedURL) {
-            original = JDHTML.animatedGIFURL(displayedURL) ?? displayedURL
-        } else {
-            original = JDHTML.displayURL(displayedURL, thumbnail: false)
-        }
-        guard let (data, response) = try? await URLSession.shared.data(from: original),
+        // 旧实现用 displayURL(thumbnail:false)，会把 large/xxx.jpg 改成
+        // mw1024/xxx.jpg —— 分享出去的其实是降采样图。统一走 originalURL 取站点原图。
+        let original = JDHTML.originalURL(displayedURL)
+        var request = URLRequest(url: original)
+        request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(JDAPI.base + "/", forHTTPHeaderField: "Referer")
+        guard let (data, response) = try? await ImageCache.session.data(for: request),
               let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else { return }
+        ImageCache.shared.storeCachedResponse(
+            CachedURLResponse(response: http, data: data), for: request
+        )
 
         // GIF 写成临时文件，分享面板会按动图处理；静态图直接分享 UIImage。
         if String(data: data.prefix(3), encoding: .ascii) == "GIF" {
@@ -157,6 +178,52 @@ final class ShareState: ObservableObject {
         } else {
             item = data
         }
+    }
+}
+
+/// GIF 的 mp4 缓存：AVPlayer 直连不走 URLCache，同一动图每次点击都会重新下载。
+/// 命中本地文件就播本地，未命中仍边下边播并在后台落一份供下次使用。
+enum InlineVideoCache {
+    private static let folder: URL = {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let dir = caches.appendingPathComponent("jd_gif_videos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    static func localURL(for remote: URL) -> URL? {
+        let file = folder.appendingPathComponent(fileName(for: remote))
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
+    }
+
+    static func prefetch(_ remote: URL) {
+        var request = URLRequest(url: remote)
+        request.setValue(JDAPI.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(JDAPI.base + "/", forHTTPHeaderField: "Referer")
+        URLSession.shared.downloadTask(with: request) { temp, response, error in
+            guard let temp, error == nil,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else { return }
+            let dest = folder.appendingPathComponent(fileName(for: remote))
+            try? FileManager.default.removeItem(at: dest)
+            try? FileManager.default.moveItem(at: temp, to: dest)
+        }.resume()
+    }
+
+    static func clear() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil)) ?? []
+        for file in files { try? FileManager.default.removeItem(at: file) }
+    }
+
+    /// FNV-1a 64：稳定可跨进程复现，不依赖 Swift Hasher 的随机种子。
+    private static func fileName(for url: URL) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in Array(url.absoluteString.utf8) {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        return String(hash, radix: 16) + ".mp4"
     }
 }
 
@@ -382,7 +449,10 @@ struct InlineImageContainer: UIViewRepresentable {
             view.onSizeChange = { [weak self] size in
                 Task { @MainActor [weak self] in self?.loader.setAspect(size) }
             }
-            view.playVideo(video)
+            // 命中本地缓存就播本地文件；否则照旧边下边播，同时后台落一份。
+            let cached = InlineVideoCache.localURL(for: video)
+            if cached == nil { InlineVideoCache.prefetch(video) }
+            view.playVideo(cached ?? video)
             loader.phase = .loaded
             loader.markPlaying()
         }
@@ -393,7 +463,19 @@ struct InlineImageContainer: UIViewRepresentable {
                     return UIImage(data: data)
                 }
                 let count = CGImageSourceGetCount(source)
-                guard count > 1 else { return UIImage(data: data) }
+                guard count > 1 else {
+                    // 单帧大图按 1600px 降采样：4000px 原图解码后要占 60MB+，
+                    // 而列表宽度用不到那么大。固定阈值避免后台线程访问 UIScreen。
+                    let options: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 1600,
+                        kCGImageSourceShouldCacheImmediately: true,
+                    ]
+                    if let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+                        return UIImage(cgImage: cg)
+                    }
+                    return UIImage(data: data)
+                }
 
                 var frames: [UIImage] = []
                 var totalDelay: TimeInterval = 0
@@ -485,7 +567,11 @@ final class FittingImageView: UIView {
     /// 用 AVPlayer 播放站点同款 mp4；静音、循环、边下边播，不再逐帧解码大 GIF。
     func playVideo(_ url: URL) {
         stopVideo()
-        let player = AVPlayer(url: url)
+        // CDN 对无 UA / 无 Referer 的请求会拒绝；本地缓存文件不需要自定义头，
+        // 但 AVURLAsset 对 file:// 会忽略这些选项，两种来源可以共用这段代码。
+        let headers = ["User-Agent": JDAPI.userAgent, "Referer": JDAPI.base + "/"]
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         player.isMuted = true
         player.volume = 0
         player.actionAtItemEnd = .none

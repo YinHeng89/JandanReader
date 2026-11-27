@@ -28,6 +28,7 @@
 		8C33BDF8BD0FB779626083B7 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9544B75B0717D6E90982EA8D /* HistoryView.swift */; };
 		91E9C18E88AE86B4ADC9587C /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC214C1C9A26442324FFAFF /* Channel.swift */; };
 		93D3D3C148A24396DEF240A1 /* FavoriteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97FF86927DA1F8B6B7FBADD6 /* FavoriteStore.swift */; };
+		9D10D5D05B3FF7612567FB6F /* JandanReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6195F04E2E9912AE4B804A /* JandanReaderTests.swift */; };
 		9D61B1767390944D94D41E73 /* WeChatLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67368E674B69D755B466D05 /* WeChatLoginView.swift */; };
 		9E85ACBC99A978DA1BF556F7 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10143E5578846E64131CD76C /* Components.swift */; };
 		A79C7C0BEA02C6F1912DCEDA /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A2757ED4E6D9D41144C5AA /* HomeFeedView.swift */; };
@@ -45,6 +46,16 @@
 		F42A332E0F778E0529AE9B7E /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C280D8399B68B112976E0086 /* NotificationsView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		9702B1F69B2E55B6BA5C28CA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 74E57B539C5062B2334F1491 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 86D591DFDCBE225F4DA0564D;
+			remoteInfo = JandanReader;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0C96279EFF40AC7096F36A29 /* RichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichText.swift; sourceTree = "<group>"; };
 		0F1B3C02D08CF5687F3AE318 /* ViewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewState.swift; sourceTree = "<group>"; };
@@ -54,7 +65,7 @@
 		3216A0A5A5640B7817B4B2C7 /* SHA3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SHA3.swift; sourceTree = "<group>"; };
 		3D884677CE548C76542E7052 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		4697FFAA30626687DCF88134 /* InlineAnimatedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAnimatedImageView.swift; sourceTree = "<group>"; };
-		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JandanReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF676F6FB8CD9F9E19A7F63 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		66E6C183ACDAF84DCC5D0E07 /* VoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoteStore.swift; sourceTree = "<group>"; };
 		68A7EDE95770203EDE96407F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -63,6 +74,7 @@
 		7770FB9D0B583C99260F7335 /* PhotoFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFeedView.swift; sourceTree = "<group>"; };
 		7FDCFB6DE9F7617D6D11DDBE /* DetailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailStore.swift; sourceTree = "<group>"; };
 		81247A8D9F51C31397D101B8 /* NoticeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeStore.swift; sourceTree = "<group>"; };
+		83B9FDBC43ED8DFD64D44B66 /* JandanReaderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JandanReaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8921DC163C4A033691EC8ACD /* UserProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileStore.swift; sourceTree = "<group>"; };
 		896B1B305C4A7A0BB6DBD24A /* JandanReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JandanReaderApp.swift; sourceTree = "<group>"; };
 		8FC214C1C9A26442324FFAFF /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
@@ -80,12 +92,21 @@
 		B67368E674B69D755B466D05 /* WeChatLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeChatLoginView.swift; sourceTree = "<group>"; };
 		BE3EDC034E1A9EA0C35DA84E /* JDModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JDModels.swift; sourceTree = "<group>"; };
 		C280D8399B68B112976E0086 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
+		CF6195F04E2E9912AE4B804A /* JandanReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JandanReaderTests.swift; sourceTree = "<group>"; };
 		E0BB54079F91623FF0E2588B /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		EF53B6C79276714CB795A2BD /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		F4879EB86EC5C572DDC6E2E3 /* BannedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BannedStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		082EE2CF2EF7D6FFF49D00EC /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				CF6195F04E2E9912AE4B804A /* JandanReaderTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		9C89CA23DC6430CB393870F1 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -111,6 +132,7 @@
 			isa = PBXGroup;
 			children = (
 				D35AB39ABA00E24405B45666 /* JandanReader */,
+				082EE2CF2EF7D6FFF49D00EC /* Tests */,
 				E321B25975BF2A5DF91DDC01 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -132,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */,
+				83B9FDBC43ED8DFD64D44B66 /* JandanReaderTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -190,6 +213,24 @@
 			productReference = 4FBB5E09B91996FAE33C5BC6 /* JandanReader.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F8849D64DC1E20F629FB46B2 /* JandanReaderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0183AF58B2678876CC284A94 /* Build configuration list for PBXNativeTarget "JandanReaderTests" */;
+			buildPhases = (
+				37B200E4548ADFD07292D523 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3F97EE7B5FFB239B176DE810 /* PBXTargetDependency */,
+			);
+			name = JandanReaderTests;
+			packageProductDependencies = (
+			);
+			productName = JandanReaderTests;
+			productReference = 83B9FDBC43ED8DFD64D44B66 /* JandanReaderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -200,6 +241,11 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					86D591DFDCBE225F4DA0564D = {
+						DevelopmentTeam = PGRMM8LGUV;
+						ProvisioningStyle = Automatic;
+					};
+					F8849D64DC1E20F629FB46B2 = {
+						DevelopmentTeam = PGRMM8LGUV;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -219,6 +265,7 @@
 			projectRoot = "";
 			targets = (
 				86D591DFDCBE225F4DA0564D /* JandanReader */,
+				F8849D64DC1E20F629FB46B2 /* JandanReaderTests */,
 			);
 		};
 /* End PBXProject section */
@@ -235,6 +282,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		37B200E4548ADFD07292D523 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D10D5D05B3FF7612567FB6F /* JandanReaderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		90595055FC9D0384904444EF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -279,6 +334,14 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3F97EE7B5FFB239B176DE810 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 86D591DFDCBE225F4DA0564D /* JandanReader */;
+			targetProxy = 9702B1F69B2E55B6BA5C28CA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		05031CD118BF4D27B9361756 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -319,6 +382,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -429,6 +493,42 @@
 			};
 			name = Debug;
 		};
+		AC6FE9890F8AE5930A643B4F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinheng.JandanReaderTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JandanReader.app/JandanReader";
+			};
+			name = Debug;
+		};
+		C0BC7751425E72A7AAF31F82 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = PGRMM8LGUV;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinheng.JandanReaderTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JandanReader.app/JandanReader";
+			};
+			name = Release;
+		};
 		C7DE686B8E6C022B1BAF1F13 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -454,6 +554,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0183AF58B2678876CC284A94 /* Build configuration list for PBXNativeTarget "JandanReaderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC6FE9890F8AE5930A643B4F /* Debug */,
+				C0BC7751425E72A7AAF31F82 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		48BCF34F300C972FD05B482F /* Build configuration list for PBXProject "JandanReader" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

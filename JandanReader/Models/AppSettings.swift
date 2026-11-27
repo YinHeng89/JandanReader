@@ -5,7 +5,8 @@ import SwiftUI
 final class AppSettings: ObservableObject {
     private enum Key {
         static let dark = "jd_dark_mode"
-        static let clean = "jd_clean_mode"
+        /// 沿用旧 key，避免升级后用户设置丢失；云同步字段同样仍叫 cleanMode。
+        static let thumbnails = "jd_clean_mode"
         static let font = "jd_font_scale"
         static let channel = "jd_last_channel"
     }
@@ -18,12 +19,16 @@ final class AppSettings: ObservableObject {
             PrefsStore.shared.notifyLocalChange()
         }
     }
-    @Published var cleanMode: Bool {
+
+    /// 只控制图片尺寸（开启加载 600px 缩略图，关闭加载 large 原图）。
+    /// 旧版同时用它控制首页摘要行数，属于一个开关两种语义，已拆分。
+    @Published var useThumbnails: Bool {
         didSet {
-            defaults.set(cleanMode, forKey: Key.clean)
+            defaults.set(useThumbnails, forKey: Key.thumbnails)
             PrefsStore.shared.notifyLocalChange()
         }
     }
+
     @Published var fontScale: Double {
         didSet {
             defaults.set(fontScale, forKey: Key.font)
@@ -37,12 +42,12 @@ final class AppSettings: ObservableObject {
     init() {
         defaults.register(defaults: [
             Key.dark: false,
-            Key.clean: true,
+            Key.thumbnails: true,
             Key.font: 100.0,
             Key.channel: Channel.home.id,
         ])
         darkMode = defaults.bool(forKey: Key.dark)
-        cleanMode = defaults.bool(forKey: Key.clean)
+        useThumbnails = defaults.bool(forKey: Key.thumbnails)
         fontScale = defaults.double(forKey: Key.font)
         lastChannelID = defaults.string(forKey: Key.channel) ?? Channel.home.id
     }

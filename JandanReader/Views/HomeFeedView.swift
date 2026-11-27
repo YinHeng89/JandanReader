@@ -4,18 +4,21 @@ import SwiftUI
 /// 日期分组标题 + 左侧大号吐槽数 + 右侧标题/摘要 + 吐槽预览（头像·昵称·内容）。
 struct HomeFeedView: View {
     @ObservedObject var store: FeedStore
-    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var sentinel = LoadMoreSentinel()
 
+    /// 旧实现用 lastIndex(where:) 每条回扫，n 条数据 O(n²)；
+    /// 改成一次线性扫描 + 日期索引表，且不要求日期连续，避免同日分段重 id。
     private var sections: [(date: String, items: [JDFeedItem])] {
         var result: [(String, [JDFeedItem])] = []
+        var indexByDate: [String: Int] = [:]
         for item in store.items where !banned.isBlocked(userID: item.authorID, nickname: item.author) {
             let key = item.sectionDate ?? ""
-            if let last = result.lastIndex(where: { $0.0 == key }) {
-                result[last].1.append(item)
+            if let index = indexByDate[key] {
+                result[index].1.append(item)
             } else {
+                indexByDate[key] = result.count
                 result.append((key, [item]))
             }
         }
@@ -170,7 +173,6 @@ struct HomeFeedView: View {
 /// 首页单行：左侧大号评论数 + 右侧标题 / 摘要 / 吐槽预览（不显示图片）。
 private struct HomeRow: View {
     let item: JDFeedItem
-    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -191,7 +193,8 @@ private struct HomeRow: View {
                     Text(item.body)
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
-                        .lineLimit(settings.cleanMode ? 3 : 2)
+                        // 行数固定为 3；图片开关不再顺带改变文字排版。
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -220,18 +223,11 @@ private struct HomeRow: View {
 extension String {
     /// "2026-11-26T10:06:55+08:00" → "11月26日"
     var jdSectionDate: String {
-        let date = self
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:sszzz"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        if let d = formatter.date(from: date) {
-            let out = DateFormatter()
-            out.dateFormat = "M月d日"
-            out.locale = Locale(identifier: "zh_CN")
-            return out.string(from: d)
+        if let d = JDDateFormatters.sectionInput.date(from: self) {
+            return JDDateFormatters.sectionOutput.string(from: d)
         }
-        let parts = date.prefix(10).split(separator: "-")
+        let parts = prefix(10).split(separator: "-")
         if parts.count == 3 { return "\(Int(parts[1]) ?? 0)月\(Int(parts[2]) ?? 0)日" }
-        return date
+        return self
     }
 }

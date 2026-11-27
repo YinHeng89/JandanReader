@@ -14,10 +14,16 @@ struct SettingsView: View {
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var banned: BannedStore
     @EnvironmentObject private var auth: AuthStore
+    /// 直接读单例属性不会触发重绘，必须订阅。
+    @ObservedObject private var favorites = FavoriteStore.shared
+    @ObservedObject private var prefs = PrefsStore.shared
+    @ObservedObject private var notices = NoticeStore.shared
     @Environment(\.dismiss) private var dismiss
     @StateObject private var theme = SettingsTheme()
     /// 作为底部 Tab 时常驻，不需要「完成」关闭按钮。
     var showsDoneButton: Bool = true
+    /// 设置页里打开收藏 / 历史时，内容路由落到哪个频道（由外壳显式注入）。
+    var contentChannel: Channel = .home
 
     @MainActor
     private func refreshCacheUsage() async {
@@ -56,7 +62,7 @@ struct SettingsView: View {
                     Toggle(isOn: $settings.darkMode) {
                         Label("夜间模式", systemImage: "moon.fill")
                     }
-                    Toggle(isOn: $settings.cleanMode) {
+                    Toggle(isOn: $settings.useThumbnails) {
                         Label("显示缩略图", systemImage: "photo")
                     }
                     VStack(alignment: .leading, spacing: 8) {
@@ -73,7 +79,7 @@ struct SettingsView: View {
                 } header: {
                     Text("外观")
                 } footer: {
-                    Text("显示缩略图加载 600px 小图，关闭后加载原图。")
+                    Text("开启后图片加载 600px 小图，更快更省流量；关闭后加载 large 原图。此开关只影响图片，不改变文字行数。")
                 }
 
                 Section {
@@ -88,7 +94,7 @@ struct SettingsView: View {
                         }
                     }
                     NavigationLink {
-                        FavoritesView()
+                        FavoritesView(channel: contentChannel)
                             .environmentObject(auth)
                             .environmentObject(router)
                             .environmentObject(settings)
@@ -97,7 +103,7 @@ struct SettingsView: View {
                             Label("我的收藏", systemImage: "bookmark")
                             Spacer()
                             if auth.isLoggedIn {
-                                Text("\(FavoriteStore.shared.commentIDs.count) 条")
+                                Text("\(favorites.commentIDs.count) 条")
                                     .foregroundStyle(.secondary)
                             } else {
                                 Text("需登录").foregroundStyle(.secondary)
@@ -112,26 +118,26 @@ struct SettingsView: View {
                         HStack {
                             Label("消息通知", systemImage: "bell")
                             Spacer()
-                            if auth.isLoggedIn && NoticeStore.shared.unread > 0 {
-                                Text("\(NoticeStore.shared.unread) 条未读")
+                            if auth.isLoggedIn && notices.unread > 0 {
+                                Text("\(notices.unread) 条未读")
                                     .foregroundStyle(.secondary)
                             } else if !auth.isLoggedIn {
                                 Text("需登录").foregroundStyle(.secondary)
                             }
                         }
                     }
-                    if PrefsStore.shared.canSync {
+                    if prefs.canSync {
                         HStack {
                             Label("偏好云同步", systemImage: "icloud")
                             Spacer()
-                            Text(PrefsStore.shared.isSynced ? "已同步" : "待同步")
+                            Text(prefs.isSynced ? "已同步" : "待同步")
                                 .foregroundStyle(.secondary)
                         }
                     }
                 } header: {
                     Text("内容")
                 } footer: {
-                    Text(PrefsStore.shared.canSync
+                    Text(prefs.canSync
                          ? "订阅会员的屏蔽名单与显示设置会同步到云端，本地数据始终保留。"
                          : "屏蔽后该作者的内容与评论将不再显示，仅保存在本机。")
                 }
@@ -172,7 +178,7 @@ struct SettingsView: View {
                 } header: {
                     Text("数据")
                 } footer: {
-                    Text("缓存包含网络图片与内存中的解码图；清除后重新加载会消耗流量。阅读历史只保存在本机，不会上传。")
+                    Text("缓存包含网络图片的磁盘/内存副本与已解码位图；清除后重新加载会消耗流量。阅读历史只保存在本机，不会上传。")
                 }
 
                 Section {
@@ -200,7 +206,7 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $theme.showHistory) {
-                HistoryView()
+                HistoryView(channel: contentChannel)
                     .environmentObject(history)
                     .environmentObject(router)
                     .environmentObject(settings)

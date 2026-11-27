@@ -139,6 +139,7 @@ final class FeedStore: ObservableObject {
             showToast(error.localizedDescription)
             return
         }
+        // 网络期间列表可能已刷新，必须按 id 重新定位。
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         let original = items[index]
         let delta = like ? (1, 0) : (0, 1)
@@ -155,23 +156,26 @@ final class FeedStore: ObservableObject {
         VoteStore.shared.set(item.id, like: like)
     }
 
-    /// 行内吐槽投票：吐槽列表里的 comment_ID 同样走 /api/comment/vote。
-    func voteInline(commentID: Int, like: Bool) async {
-        guard voteKind(commentID) == nil else { return }
+    /// 行内吐槽投票：显式传 itemID，按 comment.id 精确定位，
+    /// 不再用字典 first(where:) + 强制解包（列表刷新后会把票加到别的评论）。
+    func voteInline(itemID: Int, commentID: Int, like: Bool) async {
+        guard voteKind(commentID) == nil,
+              inlineComments[itemID]?.contains(where: { $0.id == commentID }) == true else { return }
         do {
             try await JDAPI.vote(commentID: commentID, like: like)
         } catch {
             showToast(error.localizedDescription)
             return
         }
-        guard let (itemID, index) = inlineComments.first(where: { $0.value.contains { $0.id == commentID } })
-                .map({ ($0.key, $0.value.firstIndex { $0.id == commentID }!) }),
-              let comment = inlineComments[itemID]?[index] else { return }
+        guard var list = inlineComments[itemID],
+              let index = list.firstIndex(where: { $0.id == commentID }) else { return }
+        let comment = list[index]
         let changed = comment.withVote(
             positive: like ? (comment.vote_positive ?? 0) + 1 : comment.vote_positive,
             negative: like ? comment.vote_negative : (comment.vote_negative ?? 0) + 1
         )
-        inlineComments[itemID]![index] = changed
+        list[index] = changed
+        inlineComments[itemID] = list
         VoteStore.shared.set(commentID, like: like)
     }
 
@@ -185,15 +189,7 @@ final class FeedStore: ObservableObject {
         }
         do {
             try await JDAPI.createTucao(commentID: commentID, content: text)
-            let escaped = text.replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-            let pending = JDComment(
-                id: -Int(Date().timeIntervalSince1970), post_id: nil, author: author,
-                author_type: nil, date_gmt: ISO8601DateFormatter().string(from: Date()),
-                user_id: nil, content: escaped, vote_positive: 0, vote_negative: 0,
-                sub_comment_count: nil, images: nil, post_title: nil, ip_location: nil,
-                avatar_ref: nil, avatar_type: nil, author_membership: nil, hot_tucao: nil, tags: nil
-            )
+            let pending = JDPendingComment.make(content: text, author: author)
             if inlineComments[itemID] == nil { inlineComments[itemID] = [] }
             inlineComments[itemID]?.insert(pending, at: 0)
             showToast("发布成功，请等待审核")

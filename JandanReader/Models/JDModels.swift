@@ -27,6 +27,8 @@ struct JDEnvelope<T: Decodable>: Decodable {
 /// 站点有些接口直接返回数组，用这个包一层让 JSONDecoder 也能吃下。
 struct AnyDecodable: Decodable {
     let value: Any
+    /// 业务码为 0 但 data 为空时，给「只关心成败」的调用方一个空值。
+    init(_ value: Any) { self.value = value }
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let b = try? c.decode(Bool.self) { value = b }
@@ -452,23 +454,96 @@ struct JDCaptcha: Codable {
     let image: String?
 }
 
+// MARK: - 本地待审核条目
+
+/// 发布成功后插入的本地占位评论。两处 store 共用，避免各写一份转义与 id 逻辑。
+@MainActor
+enum JDPendingComment {
+    /// 旧实现用 `-Int(Date().timeIntervalSince1970)`，同一秒连发两条会撞 id，
+    /// SwiftUI ForEach 因此复用错行。改用会话内单调递减的负数序列。
+    private static var sequence = 0
+
+    static func make(content: String, author: String) -> JDComment {
+        sequence -= 1
+        return JDComment(
+            id: sequence, post_id: nil, author: author,
+            author_type: nil, date_gmt: JDDateFormatters.currentISO8601(),
+            user_id: nil, content: escapedHTML(content),
+            vote_positive: 0, vote_negative: 0,
+            sub_comment_count: nil, images: nil, post_title: nil, ip_location: nil,
+            avatar_ref: nil, avatar_type: nil, author_membership: nil, hot_tucao: nil, tags: nil
+        )
+    }
+
+    /// RichText 会把 content 当 HTML 渲染，用户输入必须先转义，
+    /// 否则 `<` / `&` / `"` 会破坏排版甚至注入标签。
+    static func escapedHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}
+
 // MARK: - 工具
+
+/// 日期格式化器统一缓存。构造开销很大，旧实现每个 cell 每次重绘都新建两个
+/// DateFormatter / ISO8601DateFormatter，是长列表掉帧的可查根因之一。
+/// 这些对象只在主线程（SwiftUI body / @MainActor store）使用。
+enum JDDateFormatters {
+    static let iso8601: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    static let iso8601Plain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    static let sectionInput: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:sszzz"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    static let sectionOutput: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M月d日"
+        f.locale = Locale(identifier: "zh_CN")
+        return f
+    }()
+
+    static let shortOutput: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "MM-dd HH:mm"
+        return f
+    }()
+
+    static let sqlInput: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    /// 本地待审核条目用的时间戳，复用同一个格式化器。
+    static func currentISO8601() -> String { iso8601Plain.string(from: Date()) }
+}
 
 extension String {
     /// 从 ISO8601 / "yyyy-MM-dd HH:mm:ss" 字符串中取出适合展示的短日期。
     var jdShortDate: String {
-        if let date = ISO8601DateFormatter().date(from: self) {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "zh_CN")
-            f.dateFormat = "MM-dd HH:mm"
-            return f.string(from: date)
+        if let date = JDDateFormatters.iso8601.date(from: self)
+            ?? JDDateFormatters.iso8601Plain.date(from: self) {
+            return JDDateFormatters.shortOutput.string(from: date)
         }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        if let date = f.date(from: self) {
-            f.dateFormat = "MM-dd HH:mm"
-            return f.string(from: date)
+        if let date = JDDateFormatters.sqlInput.date(from: self) {
+            return JDDateFormatters.shortOutput.string(from: date)
         }
         return self
     }

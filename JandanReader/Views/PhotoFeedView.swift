@@ -47,9 +47,11 @@ struct PhotoFeedView: View {
     }
 
     private var list: some View {
-        ScrollViewReader { proxy in
+        // 一次算好可见列表，避免 ForEach 与 prefetch 各跑一遍 filter。
+        let items = visibleItems
+        return ScrollViewReader { proxy in
             List {
-                ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     // 评论区必须是 List 的顶层 row：ScrollViewReader 只注册顶层 row 的 id，
                     // 挂在行内 VStack 子视图上的 id 永远滚不到。
                     Group {
@@ -79,7 +81,7 @@ struct PhotoFeedView: View {
                         .id(item.id)
                         // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
                         .listRowSeparator(.hidden)
-                        .onAppear { prefetchIfNeeded(index: index) }
+                        .onAppear { prefetchIfNeeded(index: index, count: items.count) }
 
                         if store.expandedCommentID == item.id {
                             InlineCommentsView(item: item, store: store)
@@ -104,10 +106,10 @@ struct PhotoFeedView: View {
     }
 
     /// 距离底部还有 4 条时就开始取下一页，滚动时不再等网。
-    private func prefetchIfNeeded(index: Int) {
+    private func prefetchIfNeeded(index: Int, count: Int) {
         // 评论展开时行高变化会让相邻行的 onAppear 重新触发，避免误触发翻页导致列表跳动。
         guard store.expandedCommentID == nil else { return }
-        guard index >= visibleItems.count - 4 else { return }
+        guard index >= count - 4 else { return }
         triggerLoadMore()
     }
 
@@ -432,7 +434,11 @@ private struct InlineCommentsView: View {
                     InlineCommentRow(
                         comment: comment,
                         onVote: { like in
-                            Task { await store.voteInline(commentID: comment.id, like: like) }
+                            Task {
+                                await store.voteInline(
+                                    itemID: item.id, commentID: comment.id, like: like
+                                )
+                            }
                         },
                         voteKind: store.voteKind(comment.id),
                         onProfile: comment.user_id.map { id in

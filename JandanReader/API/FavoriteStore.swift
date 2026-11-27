@@ -1,11 +1,15 @@
 import Foundation
 import SwiftUI
 
-/// 收藏状态：只拉第一页（最近 20 条）用于菜单判断和列表展示。
-/// 服务端没有批量「是否已收藏」接口，照官方做法以本地 ID 集合为准。
+/// 收藏状态：分页拉全量用于「是否已收藏」判断和列表展示。
+/// 服务端没有批量「是否已收藏」接口；旧实现只拉第一页 20 条，
+/// 超出部分既看不到也取消不了收藏，这里按 total 逐页补齐。
 @MainActor
 final class FavoriteStore: ObservableObject {
     static let shared = FavoriteStore()
+
+    /// 防御性上限，避免服务端 total 异常时无限翻页。
+    private static let maxPages = 20
 
     @Published private(set) var entries: [JDFavorite] = []
     @Published private(set) var commentIDs: Set<Int> = []
@@ -30,13 +34,25 @@ final class FavoriteStore: ObservableObject {
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
+        var all: [JDFavorite] = []
+        var seen = Set<Int>()
         do {
-            let page = try await JDAPI.favorites(page: 1)
-            entries = page.list ?? []
-            commentIDs = Set(entries.compactMap(\.comment_id))
+            for page in 1...Self.maxPages {
+                let result = try await JDAPI.favorites(page: page)
+                let list = result.list ?? []
+                for entry in list where !seen.contains(entry.id) {
+                    seen.insert(entry.id)
+                    all.append(entry)
+                }
+                if list.isEmpty { break }
+                if let total = result.total, all.count >= total { break }
+            }
         } catch {
-            // 后台刷新失败保持静默，不打断当前页面
+            // 某一页失败时保留已取到的部分，不把整份收藏列表清空。
         }
+        guard !all.isEmpty else { return }
+        entries = all
+        commentIDs = Set(all.compactMap(\.comment_id))
     }
 
     @discardableResult

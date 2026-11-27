@@ -13,6 +13,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     ENABLE_PREVIEWS: YES
     CLANG_ENABLE_MODULES: YES
+    ENABLE_TESTABILITY: YES
 targets:
   JandanReader:
     type: application
@@ -42,10 +43,25 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.yinheng.JandanReader
-        DEVELOPMENT_TEAM: QQ9F8WHWZQ
+        # 与已提交的 pbxproj 保持一致；旧值 QQ9F8WHWZQ 会让 xcodegen 重新生成后签名失败。
+        DEVELOPMENT_TEAM: PGRMM8LGUV
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "1.0.0"
         SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+  JandanReaderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: JandanReader
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yinheng.JandanReaderTests
+        DEVELOPMENT_TEAM: PGRMM8LGUV
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/JandanReader.app/JandanReader"
+        BUNDLE_LOADER: "$(TEST_HOST)"

@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct HistoryView: View {
+    /// 历史记录不存所属频道，由外壳显式指定落地频道。
+    let channel: Channel
+
     @EnvironmentObject private var history: HistoryStore
     @EnvironmentObject private var router: FeedRouter
-    @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -23,7 +25,7 @@ struct HistoryView: View {
                                     id: item.postID,
                                     title: item.title,
                                     kind: item.kind,
-                                    in: currentChannel
+                                    in: channel
                                 )
                                 dismiss()
                             } label: {
@@ -57,11 +59,5 @@ struct HistoryView: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-
-    /// 历史记录只存内容类型、不存所属频道；详情页路由与频道无关，
-    /// 统一落到当前频道，避免女装频道的评论历史被强行切到无聊图。
-    private var currentChannel: Channel {
-        Channel.withID(settings.lastChannelID)
     }
 }

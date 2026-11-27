@@ -54,7 +54,8 @@ final class PrefsStore: ObservableObject {
             defer { applyingRemote = false }
 
             if let remote = prefs["settings"] as? [String: Any], let settings {
-                if let value = remote["cleanMode"] as? Bool { settings.cleanMode = value }
+                // 云端字段名沿用旧版 cleanMode，保证跨版本 / 跨设备兼容。
+                if let value = remote["cleanMode"] as? Bool { settings.useThumbnails = value }
                 if let value = remote["darkMode"] as? Bool { settings.darkMode = value }
                 if let value = remote["fontScale"] as? Double { settings.fontScale = value }
                 else if let value = remote["fontScale"] as? Int { settings.fontScale = Double(value) }
@@ -92,7 +93,8 @@ final class PrefsStore: ObservableObject {
         }
         let payload: [String: Any] = [
             "settings": [
-                "cleanMode": settings.cleanMode,
+                // 云端字段名保持 cleanMode（旧版 / 站点前端约定），语义是「使用缩略图」。
+                "cleanMode": settings.useThumbnails,
                 "darkMode": settings.darkMode,
                 "fontScale": settings.fontScale
             ],

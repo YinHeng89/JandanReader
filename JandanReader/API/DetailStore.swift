@@ -68,13 +68,13 @@ final class DetailStore: ObservableObject {
     /// 投票方向：true=赞，false=踩，nil=未投票。
     func voteKind(_ commentID: Int) -> Bool? { VoteStore.shared.kind(commentID) }
 
-    /// 投票：乐观更新，失败回滚。评论与吐槽都走同一个投票接口。
+    /// 投票：请求成功后才改数字与高亮，失败时界面保持原样。
     func vote(commentID: Int, like: Bool) async {
         guard voteKind(commentID) == nil else { return }
-        if let index = comments.firstIndex(where: { $0.id == commentID }) {
-            await applyVote(commentID: commentID, like: like, list: .comments, index: index)
-        } else if let index = tucaos.firstIndex(where: { $0.id == commentID }) {
-            await applyVote(commentID: commentID, like: like, list: .tucaos, index: index)
+        if comments.contains(where: { $0.id == commentID }) {
+            await applyVote(commentID: commentID, like: like, list: .comments)
+        } else if tucaos.contains(where: { $0.id == commentID }) {
+            await applyVote(commentID: commentID, like: like, list: .tucaos)
         }
     }
 
@@ -92,10 +92,10 @@ final class DetailStore: ObservableObject {
                 try await JDAPI.createArticleComment(
                     postID: item.id, content: text, author: author, email: ""
                 )
-                comments.insert(pendingComment(text, author: author), at: 0)
+                comments.insert(JDPendingComment.make(content: text, author: author), at: 0)
             case .comment, .forum:
                 try await JDAPI.createTucao(commentID: item.id, content: text)
-                tucaos.insert(pendingComment(text, author: author), at: 0)
+                tucaos.insert(JDPendingComment.make(content: text, author: author), at: 0)
             }
             showToast("发布成功，请等待审核")
             return true
@@ -105,43 +105,33 @@ final class DetailStore: ObservableObject {
         }
     }
 
-    private func pendingComment(_ text: String, author: String) -> JDComment {
-        JDComment(
-            id: -Int(Date().timeIntervalSince1970), post_id: nil, author: author,
-            author_type: nil, date_gmt: ISO8601DateFormatter().string(from: Date()),
-            user_id: nil, content: text, vote_positive: 0, vote_negative: 0,
-            sub_comment_count: nil, images: nil, post_title: nil, ip_location: nil,
-            avatar_ref: nil, avatar_type: nil, author_membership: nil, hot_tucao: nil, tags: nil
-        )
-    }
-
     private enum VoteList { case comments, tucaos }
 
-    private func applyVote(commentID: Int, like: Bool, list: VoteList, index: Int) async {
-        // 请求成功后再改数字与高亮，失败时界面保持原样。
+    private func applyVote(commentID: Int, like: Bool, list: VoteList) async {
         do {
             try await JDAPI.vote(commentID: commentID, like: like)
         } catch {
             showToast(error.localizedDescription)
             return
         }
-        let isValidIndex: Bool
+        // 网络期间列表可能刷新，旧 index 会指向别的评论；按 id 重新定位并复核。
+        let index: Int?
         switch list {
-        case .comments: isValidIndex = comments.indices.contains(index)
-        case .tucaos: isValidIndex = tucaos.indices.contains(index)
+        case .comments: index = comments.firstIndex(where: { $0.id == commentID })
+        case .tucaos: index = tucaos.firstIndex(where: { $0.id == commentID })
         }
-        guard isValidIndex else { return }
-        let original: JDComment
+        guard let index else { return }
         switch list {
-        case .comments: original = comments[index]
-        case .tucaos: original = tucaos[index]
-        }
-        let changed = like
-            ? original.withVote(positive: (original.vote_positive ?? 0) + 1)
-            : original.withVote(negative: (original.vote_negative ?? 0) + 1)
-        switch list {
-        case .comments: comments[index] = changed
-        case .tucaos: tucaos[index] = changed
+        case .comments:
+            let original = comments[index]
+            comments[index] = like
+                ? original.withVote(positive: (original.vote_positive ?? 0) + 1)
+                : original.withVote(negative: (original.vote_negative ?? 0) + 1)
+        case .tucaos:
+            let original = tucaos[index]
+            tucaos[index] = like
+                ? original.withVote(positive: (original.vote_positive ?? 0) + 1)
+                : original.withVote(negative: (original.vote_negative ?? 0) + 1)
         }
         VoteStore.shared.set(commentID, like: like)
     }

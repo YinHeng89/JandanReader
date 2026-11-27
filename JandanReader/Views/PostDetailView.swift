@@ -2,14 +2,16 @@ import SwiftUI
 
 /// 原生详情页：正文 + 图片 + 吐槽 / 评论。
 struct PostDetailView: View {
-    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var router: FeedRouter
     @EnvironmentObject private var banned: BannedStore
     @EnvironmentObject private var auth: AuthStore
     @StateObject private var store: DetailStore
     @StateObject private var compose = ComposeState()
+    /// 当前所属频道：点评论作者时 push 到这个频道的导航栈，而不是猜 lastChannelID。
+    let channel: Channel
 
-    init(item: JDFeedItem) {
+    init(item: JDFeedItem, channel: Channel) {
+        self.channel = channel
         _store = StateObject(wrappedValue: DetailStore(item: item))
     }
 
@@ -112,7 +114,7 @@ struct PostDetailView: View {
                     ForEach(visibleComments) { comment in
                         CommentRow(comment: comment, voteKind: store.voteKind(comment.id), onProfile: {
                             if let uid = comment.user_id {
-                                router.store(for: Channel.withID(settings.lastChannelID))?
+                                router.store(for: channel)?
                                     .push(.user(uid, comment.author ?? ""))
                             }
                         }, onNotice: { store.showToast($0) }) {
@@ -128,7 +130,7 @@ struct PostDetailView: View {
                     ForEach(visibleTucaos) { tucao in
                         CommentRow(comment: tucao, voteKind: store.voteKind(tucao.id), onProfile: {
                             if let uid = tucao.user_id {
-                                router.store(for: Channel.withID(settings.lastChannelID))?
+                                router.store(for: channel)?
                                     .push(.user(uid, tucao.author ?? ""))
                             }
                         }, onNotice: { store.showToast($0) }) {
@@ -205,7 +207,6 @@ private struct CommentRow: View {
     let onNotice: (String) -> Void
     let onUp: (() -> Void)?
     let onDown: (() -> Void)?
-    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var banned: BannedStore
     @EnvironmentObject private var auth: AuthStore
     @StateObject private var reportUI = ReportUIState()
