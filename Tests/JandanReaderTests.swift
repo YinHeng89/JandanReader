@@ -1,6 +1,40 @@
 import XCTest
 @testable import JandanReader
 
+/// membership 是位掩码，站点实测枚举：1 注册 / 2 核心 / 4 订阅 / 8 管理员。
+final class JDMembershipTests: XCTestCase {
+    /// /api/member/user/33623 实测返回 3，必须显示核心会员 + 注册会员，而不是订阅会员。
+    func testRealAccountIsCoreAndRegisteredNotSubscription() {
+        let flags = JDMembership(rawValue: 3)
+        XCTAssertEqual(flags.titles, ["煎蛋核心会员", "煎蛋注册会员"])
+        XCTAssertEqual(flags.identityText, "煎蛋核心会员、煎蛋注册会员")
+        XCTAssertFalse(flags.isSubscription)
+    }
+
+    func testOnlySubscriptionBitCountsAsSubscription() {
+        let flags = JDMembership(rawValue: 4)
+        XCTAssertTrue(flags.isSubscription)
+        XCTAssertEqual(flags.identityText, "煎蛋订阅会员")
+        XCTAssertFalse(JDMembership(rawValue: 3).isSubscription)
+    }
+
+    func testAllBitsAndUnknownBits() {
+        XCTAssertEqual(
+            JDMembership(rawValue: 15).titles,
+            ["煎蛋管理员", "煎蛋核心会员", "煎蛋注册会员", "煎蛋订阅会员"]
+        )
+        XCTAssertEqual(JDMembership(rawValue: 0).identityText, "煎蛋未认证会员")
+        XCTAssertTrue(JDMembership(rawValue: 16).titles.isEmpty)
+    }
+
+    /// get_info 返回的数字直接映射到 JDUser，不需要额外接口。
+    func testJDUserMembershipFlags() throws {
+        let json = #"{"id":33623,"nickname":"YinHeng","membership":3}"#.data(using: .utf8)!
+        let user = try JSONDecoder().decode(JDUser.self, from: json)
+        XCTAssertEqual(user.membershipFlags.identityText, "煎蛋核心会员、煎蛋注册会员")
+    }
+}
+
 /// 纯逻辑回归测试：这些点都踩过坑，必须锁住。
 /// 向量来自站点登录页实际调用的 `CryptoJS.SHA3(x,{outputLength:256})`（crypto-js 4.1.1）。
 final class SHA3Tests: XCTestCase {

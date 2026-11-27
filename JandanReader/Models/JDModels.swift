@@ -341,6 +341,39 @@ struct JDUser: Codable {
     let membership: Int?
     let avatar_ref: String?
     let avatar_type: Int?
+
+    var membershipFlags: JDMembership { JDMembership(rawValue: membership ?? 0) }
+}
+
+/// `/api/member/get_info` / `/api/member/user/{id}` 的 membership 是位掩码，
+/// 与站点 Nuxt 枚举一致：RealNameVerify=1、CoreUser=2、Subscription=4、SiteAdmin=8。
+/// 不是等级数值，更不能把「非 0」当成订阅会员。
+struct JDMembership: OptionSet {
+    let rawValue: Int
+
+    static let realNameVerify = JDMembership(rawValue: 1 << 0)  // 煎蛋注册会员
+    static let coreUser       = JDMembership(rawValue: 1 << 1)  // 煎蛋核心会员
+    static let subscription   = JDMembership(rawValue: 1 << 2)  // 煎蛋订阅会员
+    static let siteAdmin      = JDMembership(rawValue: 1 << 3)  // 煎蛋管理员
+
+    /// 用户中心「你在煎蛋的身份」列出所有命中的位，顺序沿用站点侧栏的优先级。
+    var titles: [String] {
+        var result: [String] = []
+        if contains(.siteAdmin) { result.append("煎蛋管理员") }
+        if contains(.coreUser) { result.append("煎蛋核心会员") }
+        if contains(.realNameVerify) { result.append("煎蛋注册会员") }
+        if contains(.subscription) { result.append("煎蛋订阅会员") }
+        return result
+    }
+
+    /// 没有任何身份位时，站点显示「煎蛋未认证会员」。
+    var identityText: String {
+        let names = titles
+        return names.isEmpty ? "煎蛋未认证会员" : names.joined(separator: "、")
+    }
+
+    /// 偏好云同步 / 免广告等仅对订阅位生效。
+    var isSubscription: Bool { contains(.subscription) }
 }
 
 // MARK: - 用户主页（游客可用）

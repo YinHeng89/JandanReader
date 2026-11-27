@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// VIP 偏好云同步。membership 是位掩码，4 = Subscription。
+/// VIP 偏好云同步。membership 位掩码定义统一见 JDMembership，仅订阅位可用云端偏好。
 /// 策略：本地优先合并——下拉时补齐云端条目但绝不删除本地数据，
 /// 合并结果再回传，避免多设备间互相覆盖。
 @MainActor
@@ -25,8 +25,8 @@ final class PrefsStore: ObservableObject {
     }
 
     var canSync: Bool {
-        guard let auth, auth.isLoggedIn, let membership = auth.user?.membership else { return false }
-        return (membership & 4) != 0
+        guard let auth, auth.isLoggedIn, let user = auth.user else { return false }
+        return user.membershipFlags.isSubscription
     }
 
     /// 本地设置 / 黑名单变化入口；应用远端数据时跳过，避免回环。

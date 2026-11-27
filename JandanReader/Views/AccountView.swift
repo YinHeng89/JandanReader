@@ -41,8 +41,13 @@ struct AccountView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(auth.user?.nickname ?? "煎蛋用户")
                             .font(.headline)
-                        if (auth.user?.membership ?? 0) > 0 {
-                            Text("订阅会员").font(.caption).foregroundStyle(.orange)
+                        if let user = auth.user {
+                            // membership 是位掩码，同一账号可同时是核心会员 + 注册会员；
+                            // 只有命中 Subscription(4) 时才算订阅会员。
+                            Text("你在煎蛋的身份：\(user.membershipFlags.identityText)")
+                                .font(.caption)
+                                .foregroundStyle(user.membershipFlags.isSubscription ? Color.orange : Color.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
