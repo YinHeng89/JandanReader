@@ -137,3 +137,123 @@ final class JDLocalHelpersTests: XCTestCase {
         XCTAssertEqual("2026-11-26 10:06:55".jdShortDate, "11-26 10:06")
     }
 }
+
+// MARK: - 分页状态机回归（刷新 / 翻页竞态）
+
+private enum FeedStubError: Error { case failed }
+
+private func jdTestItem(_ id: Int) -> JDFeedItem {
+    JDFeedItem(
+        id: id, kind: .comment, title: "", body: "", author: "",
+        date: "", imageURL: nil, commentCount: 0,
+        positive: 0, negative: 0, location: nil, avatar: nil
+    )
+}
+
+private func jdTestPage(_ ids: [Int], next: Int?) -> JDFeedResult {
+    JDFeedResult(items: ids.map(jdTestItem), nextPage: next)
+}
+
+private func jdPageNumber(_ source: JDFeedSource) -> Int {
+    switch source {
+    case .timeline(let page): return page
+    case .channel(_, let page): return page
+    }
+}
+
+/// 记录「第几次请求首页」，用于区分刷新前后的两份第一页数据。
+private actor FirstPageCounter {
+    private var count = 0
+    func next() -> Int { count += 1; return count }
+}
+
+final class FeedStorePaginationTests: XCTestCase {
+
+    @MainActor
+    private func makeStore(
+        _ handler: @escaping (Int) async throws -> JDFeedResult
+    ) -> FeedStore {
+        FeedStore(channel: .withID("pic"), history: nil) { source in
+            try await handler(jdPageNumber(source))
+        }
+    }
+
+    /// 刷新前发出的翻页请求，回来时不能把新列表的 cursor 覆盖成旧页号。
+    @MainActor
+    func testStaleLoadMoreCannotOverwriteFreshCursor() async {
+        let counter = FirstPageCounter()
+        let store = makeStore { page in
+            if page == 0 {
+                let n = await counter.next()
+                return n == 1 ? jdTestPage([1, 2], next: 80) : jdTestPage([3, 4], next: 81)
+            }
+            if page == 80 {
+                try? await Task.sleep(for: .milliseconds(150))
+                return jdTestPage([90, 91], next: 79)
+            }
+            return jdTestPage([], next: nil)
+        }
+        await store.reload()
+        XCTAssertEqual(store.items.map(\.id), [1, 2])
+        XCTAssertEqual(store.cursor, 80)
+
+        let slow = Task { @MainActor in await store.loadMore() }
+        try? await Task.sleep(for: .milliseconds(20))
+        await store.reload()
+        await slow.value
+
+        XCTAssertEqual(store.items.map(\.id), [3, 4], "陈旧页不能追加到刷新后的列表")
+        XCTAssertEqual(store.cursor, 81, "陈旧页不能覆盖刷新后的游标")
+        XCTAssertFalse(store.isLoadingMore)
+    }
+
+    /// 刷新后分页边界平移，连续几页全是重复项时必须自动跳到有内容的页。
+    @MainActor
+    func testDuplicateOnlyPagesAreSkipped() async {
+        let store = makeStore { page in
+            switch page {
+            case 0: return jdTestPage([1], next: 5)
+            case 5: return jdTestPage([1], next: 4)
+            case 4: return jdTestPage([1], next: 3)
+            case 3: return jdTestPage([2], next: 2)
+            default: return jdTestPage([], next: nil)
+            }
+        }
+        await store.reload()
+        await store.loadMore()
+        XCTAssertEqual(store.items.map(\.id), [1, 2])
+        XCTAssertEqual(store.cursor, 2)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertFalse(store.isLoadingMore)
+    }
+
+    /// 全是重复页时不能无限翻下去，也不能停在「永久转圈」。
+    @MainActor
+    func testEndlessDuplicatePagesSurfaceRetryState() async {
+        let store = makeStore { page in
+            page == 0
+                ? jdTestPage([1], next: 20)
+                : jdTestPage([1], next: page > 1 ? page - 1 : nil)
+        }
+        await store.reload()
+        await store.loadMore()
+        XCTAssertEqual(store.items.map(\.id), [1])
+        XCTAssertNotNil(store.errorMessage)
+        XCTAssertNotNil(store.cursor)
+        XCTAssertFalse(store.isLoadingMore)
+    }
+
+    /// 翻页失败后必须收起 loading 并保留游标，界面才能点重试。
+    @MainActor
+    func testPageFailureDoesNotLeaveLoadingState() async {
+        let store = makeStore { page in
+            if page == 0 { return jdTestPage([1], next: 7) }
+            throw FeedStubError.failed
+        }
+        await store.reload()
+        await store.loadMore()
+        XCTAssertFalse(store.isLoadingMore)
+        XCTAssertEqual(store.cursor, 7)
+        XCTAssertNotNil(store.errorMessage)
+    }
+}

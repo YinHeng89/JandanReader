@@ -7,6 +7,9 @@ final class LoadMoreSentinel: ObservableObject {
     /// 哨兵触发翻页的去抖任务：行高变化或展开评论会让哨兵短暂进入视口，
     /// 立刻请求会在置顶 / 展开动画期间改变内容高度，把滚动位置冲掉。
     var pendingLoad: Task<Void, Never>?
+    /// 展开 / 收起评论时只把翻页**延迟**一小段时间，避免连锁追加；
+    /// 这不是永久开关，超时后仍会正常翻页（旧实现用 expandedCommentID 硬挡，会卡死分页）。
+    var suppressUntil: Date = .distantPast
 }
 
 /// 轻量提示：底部胶囊，2 秒自动消失，不打断当前页面。

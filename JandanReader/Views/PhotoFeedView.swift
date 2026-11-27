@@ -49,58 +49,51 @@ struct PhotoFeedView: View {
     private var list: some View {
         // 一次算好可见列表，避免 ForEach 与 prefetch 各跑一遍 filter。
         let items = visibleItems
-        return ScrollViewReader { proxy in
-            List {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    // 评论区必须是 List 的顶层 row：ScrollViewReader 只注册顶层 row 的 id，
-                    // 挂在行内 VStack 子视图上的 id 永远滚不到。
-                    Group {
-                        PhotoRow(
-                            item: item,
-                            expanded: store.expandedCommentID == item.id,
-                            onOpen: { store.push(.feed(item)) },
-                            onComments: {
-                                let wasExpanded = store.expandedCommentID == item.id
-                                store.toggleInlineComments(for: item)
-                                // 等新 row 插入视图树后再滚到评论区顶部。
-                                if !wasExpanded {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                        proxy.scrollTo("comments-\(item.id)", anchor: .top)
-                                    }
-                                }
-                            },
-                            onVote: { like in
-                                Task { await store.vote(item: item, like: like) }
-                            },
-                            voteKind: store.voteKind(item.id),
-                            onProfile: item.authorID.map { id in
-                                { store.push(.user(id, item.author)) }
-                            },
-                            onNotice: { store.showToast($0) }
-                        )
-                        .id(item.id)
-                        // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
-                        .listRowSeparator(.hidden)
-                        .onAppear { prefetchIfNeeded(index: index, count: items.count) }
+        return List {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                // 评论区是当前条下面的独立 row：只在下方插入内容，不做任何 scrollTo，
+                // 列表 contentOffset 保持不变，所以页面不会跳、只往下展开。
+                Group {
+                    PhotoRow(
+                        item: item,
+                        expanded: store.expandedCommentID == item.id,
+                        onOpen: { store.push(.feed(item)) },
+                        onComments: {
+                            // 插入评论行会让下面的行高变化，短暂延迟翻页避免连锁追加；
+                            // 这里不滚动列表，评论区只从当前位置往下展开。
+                            sentinel.suppressUntil = Date().addingTimeInterval(0.6)
+                            store.toggleInlineComments(for: item)
+                        },
+                        onVote: { like in
+                            Task { await store.vote(item: item, like: like) }
+                        },
+                        voteKind: store.voteKind(item.id),
+                        onProfile: item.authorID.map { id in
+                            { store.push(.user(id, item.author)) }
+                        },
+                        onNotice: { store.showToast($0) }
+                    )
+                    .id(item.id)
+                    // 自带分隔线会随行高变化移动/改变缩进，用行内固定分隔线代替。
+                    .listRowSeparator(.hidden)
+                    .onAppear { prefetchIfNeeded(index: index, count: items.count) }
 
-                        if store.expandedCommentID == item.id {
-                            InlineCommentsView(item: item, store: store)
-                                .id("comments-\(item.id)")
-                                .listRowSeparator(.hidden)
-                        }
+                    if store.expandedCommentID == item.id {
+                        InlineCommentsView(item: item, store: store)
+                            .listRowSeparator(.hidden)
                     }
                 }
-                loadMoreSection
             }
-            .listStyle(.plain)
-            .refreshable { await store.reload() }
-            .overlay(alignment: .top) {
-                if store.hasNewContent {
-                    NewContentBanner { Task { await store.acceptNewContent() } }
-                        .padding(.top, 8)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
-                }
+            loadMoreSection
+        }
+        .listStyle(.plain)
+        .refreshable { await store.reload() }
+        .overlay(alignment: .top) {
+            if store.hasNewContent {
+                NewContentBanner { Task { await store.acceptNewContent() } }
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: store.hasNewContent)
             }
         }
     }
@@ -108,6 +101,7 @@ struct PhotoFeedView: View {
     /// 距离底部还有 4 条时就开始取下一页，滚动时不再等网。
     private func prefetchIfNeeded(index: Int, count: Int) {
         // 评论展开时行高变化会让相邻行的 onAppear 重新触发，避免误触发翻页导致列表跳动。
+        // 这是提前量优化，被抑制时仍由底部哨兵负责翻页，不会卡死分页。
         guard store.expandedCommentID == nil else { return }
         guard index >= count - 4 else { return }
         triggerLoadMore()
@@ -129,15 +123,18 @@ struct PhotoFeedView: View {
             if store.isLoadingMore {
                 HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
             } else if store.cursor != nil {
-                if store.errorMessage != nil {
+                if let message = store.errorMessage {
                     VStack(spacing: 4) {
-                        Text("加载失败，上滑重试").font(.caption).foregroundStyle(.secondary)
+                        Text(message).font(.caption).foregroundStyle(.secondary)
                         Button("重试") { triggerLoadMore() }
                             .font(.caption).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
-                    HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
+                    // 空闲时不显示转圈：旧实现这里常驻 ProgressView，
+                    // 刷新后一旦哨兵没被重新调度，看起来就是「一直在转圈」。
+                    // 保留 16pt 透明触发区，确保哨兵的 onAppear 可靠触发。
+                    Color.clear.frame(height: 16)
                 }
             } else {
                 Text("已经到底了").font(.caption).foregroundStyle(.secondary)
@@ -146,8 +143,17 @@ struct PhotoFeedView: View {
         }
         .onAppear(perform: handleTriggerAppear)
         .onDisappear(perform: handleTriggerDisappear)
+        // 任一分页状态变化都补一次调度：整页去重时 items.count 不变，
+        // 只靠它就再也不会触发下一页。
         .onChange(of: store.items.count) { _, _ in handleItemsCountChange() }
-        // 收起评论后若仍停在底部，重新调度翻页（展开期间是被抑制的）。
+        .onChange(of: store.cursor) { _, _ in handleItemsCountChange() }
+        .onChange(of: store.isLoadingMore) { _, loading in
+            if !loading { handleItemsCountChange() }
+        }
+        .onChange(of: store.isLoading) { _, loading in
+            // 刷新期间被 store 守卫吞掉的翻页，刷新结束后补回来。
+            if !loading { handleItemsCountChange() }
+        }
         .onChange(of: store.expandedCommentID) { _, _ in
             if sentinel.visible { scheduleLoadMore() }
         }
@@ -165,24 +171,27 @@ struct PhotoFeedView: View {
     }
 
     private func handleItemsCountChange() {
-        // 新一页不足一屏时哨兵不会重新出现，数据变化后补一次（同样走去抖）。
-        if sentinel.visible { scheduleLoadMore() }
+        guard sentinel.visible, store.errorMessage == nil else { return }
+        scheduleLoadMore()
     }
 
     /// 哨兵出现后延迟一拍再翻页，避免行高变化 / 展开评论时连锁追加内容。
     private func scheduleLoadMore() {
+        guard store.errorMessage == nil else { return }
         sentinel.pendingLoad?.cancel()
+        // 展开 / 收起评论后的短时间内用更长延迟；只是延迟，不会永久阻塞分页。
+        let delay = max(350, Int(sentinel.suppressUntil.timeIntervalSinceNow * 1000))
         sentinel.pendingLoad = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled, sentinel.visible else { return }
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard !Task.isCancelled, sentinel.visible, store.errorMessage == nil else { return }
             triggerLoadMore()
         }
     }
 
     private func triggerLoadMore() {
-        guard store.cursor != nil, !store.isLoadingMore else { return }
-        // 评论展开期间行高会变，先不翻页，收起后由 onChange 重新调度。
-        guard store.expandedCommentID == nil else { return }
+        guard store.cursor != nil, !store.isLoadingMore, !store.isLoading else { return }
+        // 不再用 expandedCommentID 硬挡：展开评论只影响下方行高，顶部 contentOffset
+        // 不变，翻页不会把页面顶走，更不会在展开状态下永久卡住分页。
         Task { await store.loadMore() }
     }
 

@@ -108,15 +108,17 @@ struct HomeFeedView: View {
             if store.isLoadingMore {
                 HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
             } else if store.cursor != nil {
-                if store.errorMessage != nil {
+                if let message = store.errorMessage {
                     VStack(spacing: 4) {
-                        Text("加载失败，上滑重试").font(.caption).foregroundStyle(.secondary)
+                        Text(message).font(.caption).foregroundStyle(.secondary)
                         Button("重试") { triggerLoadMore() }
                             .font(.caption).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
-                    HStack { Spacer(); ProgressView().tint(Color.accentColor); Spacer() }
+                    // 空闲时不显示转圈；只有真正在请求时才转。
+                    // 保留 16pt 透明触发区，确保哨兵的 onAppear 可靠触发。
+                    Color.clear.frame(height: 16)
                 }
             } else {
                 Text("已经到底了").font(.caption).foregroundStyle(.secondary)
@@ -125,7 +127,16 @@ struct HomeFeedView: View {
         }
         .onAppear(perform: handleTriggerAppear)
         .onDisappear(perform: handleTriggerDisappear)
+        // cursor / isLoadingMore / isLoading 任一变化都补一次调度：
+        // 整页去重后 items.count 不变，只靠它会导致分页永久停摆。
         .onChange(of: store.items.count) { _, _ in handleItemsCountChange() }
+        .onChange(of: store.cursor) { _, _ in handleItemsCountChange() }
+        .onChange(of: store.isLoadingMore) { _, loading in
+            if !loading { handleItemsCountChange() }
+        }
+        .onChange(of: store.isLoading) { _, loading in
+            if !loading { handleItemsCountChange() }
+        }
     }
 
     private func handleTriggerAppear() {
@@ -140,22 +151,23 @@ struct HomeFeedView: View {
     }
 
     private func handleItemsCountChange() {
-        // 新一页不足一屏时哨兵不会重新出现，数据变化后补一次（同样走去抖）。
-        if sentinel.visible { scheduleLoadMore() }
+        guard sentinel.visible, store.errorMessage == nil else { return }
+        scheduleLoadMore()
     }
 
     /// 哨兵出现后延迟一拍再翻页，避免置顶动画期间连锁追加内容把滚动位置冲掉。
     private func scheduleLoadMore() {
+        guard store.errorMessage == nil else { return }
         sentinel.pendingLoad?.cancel()
         sentinel.pendingLoad = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled, sentinel.visible else { return }
+            guard !Task.isCancelled, sentinel.visible, store.errorMessage == nil else { return }
             triggerLoadMore()
         }
     }
 
     private func triggerLoadMore() {
-        guard store.cursor != nil, !store.isLoadingMore else { return }
+        guard store.cursor != nil, !store.isLoadingMore, !store.isLoading else { return }
         Task { await store.loadMore() }
     }
 

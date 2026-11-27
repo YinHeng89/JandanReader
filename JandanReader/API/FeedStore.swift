@@ -14,6 +14,9 @@ enum JDNavigation: Hashable {
 /// 每个频道一个 FeedStore，切走再切回保留列表、滚动锚点与浏览栈。
 @MainActor
 final class FeedStore: ObservableObject {
+    /// 分页数据源可注入，便于用确定性假数据回归「刷新 / 翻页」竞态。
+    typealias PageLoader = (JDFeedSource) async throws -> JDFeedResult
+
     let channel: Channel
 
     @Published private(set) var items: [JDFeedItem] = []
@@ -30,13 +33,24 @@ final class FeedStore: ObservableObject {
     @Published private(set) var inlineLoadingIDs: Set<Int> = []
     @Published private(set) var inlineErrors: [Int: String] = [:]
 
-    private(set) var cursor: Int?
+    /// 游标必须可观察：某一页去重后可能一条新内容都没有，items.count 不变，
+    /// 视图要靠 cursor 的变化继续调度下一页。
+    @Published private(set) var cursor: Int?
+    /// 每次首屏 / 下拉刷新自增。在途 loadMore 回来时若 epoch 变了就把结果整体作废，
+    /// 否则刷新前那一页的响应会覆盖新列表的 cursor，导致旧内容再也加载不出来。
+    private var epoch = 0
     private var loaded = false
     private weak var history: HistoryStore?
+    private let pageLoader: PageLoader
 
-    init(channel: Channel, history: HistoryStore?) {
+    init(
+        channel: Channel,
+        history: HistoryStore?,
+        loader: @escaping PageLoader = JDFeedLoader.load(source:)
+    ) {
         self.channel = channel
         self.history = history
+        self.pageLoader = loader
     }
 
     /// 轻量提示：连续触发时只保留最后一条。
@@ -52,50 +66,93 @@ final class FeedStore: ObservableObject {
     func load(force: Bool = false) async {
         guard !isLoading else { return }
         if loaded && !force { return }
+        epoch += 1
+        let token = epoch
         isLoading = true
+        isLoadingMore = false
         errorMessage = nil
+        defer { if epoch == token { isLoading = false } }
         do {
-            let result = try await JDFeedLoader.load(source: source(page: initialPage))
-            items = result.items
-            cursor = result.nextPage
-            loaded = true
+            let result = try await pageLoader(source(page: initialPage))
+            guard epoch == token else { return }
+            applyFirstPage(result)
         } catch {
+            guard epoch == token else { return }
             errorMessage = error.localizedDescription
         }
-        isLoading = false
     }
 
     /// 下拉刷新：保留旧列表直到新数据到达，避免刷新中被 `load()` 的 isLoading 守卫拦住导致空列表。
     func reload() async {
         guard !isLoading else { return }
+        epoch += 1
+        let token = epoch
         isLoading = true
+        isLoadingMore = false
         errorMessage = nil
-        defer { isLoading = false }
+        // 刷新会换掉整份列表：收起评论区，避免它指向已消失的条目并永久阻塞翻页。
+        expandedCommentID = nil
+        inlineErrors = [:]
+        defer { if epoch == token { isLoading = false } }
         do {
-            let result = try await JDFeedLoader.load(source: source(page: initialPage))
-            items = result.items
-            cursor = result.nextPage
-            loaded = true
+            let result = try await pageLoader(source(page: initialPage))
+            guard epoch == token else { return }
+            applyFirstPage(result)
         } catch {
+            guard epoch == token else { return }
             errorMessage = error.localizedDescription
         }
     }
 
+    private func applyFirstPage(_ result: JDFeedResult) {
+        items = result.items
+        cursor = result.nextPage
+        loaded = true
+    }
+
+    /// 翻页：一次触发最多连续跳过 4 个「整页都是重复」的页面。
+    /// 站点按页号取数据，刷新后分页边界会平移，按 id 去重后可能一页新内容都没有；
+    /// 旧实现只靠 items.count 变化驱动哨兵，遇到空页就永久停在转圈。
     func loadMore() async {
-        guard !isLoadingMore, let page = cursor else { return }
+        guard !isLoading, !isLoadingMore, cursor != nil else { return }
+        let token = epoch
         isLoadingMore = true
-        defer { isLoadingMore = false }
+        errorMessage = nil
+        defer { if epoch == token { isLoadingMore = false } }
         do {
-            let result = try await JDFeedLoader.load(source: source(page: page))
-            // 图片流翻页时按 id 去重，避免站点边界重复。
-            let existing = Set(items.map(\.id))
-            items += result.items.filter { !existing.contains($0.id) }
-            cursor = result.nextPage
-            // 上滑加载成功时清掉上一次翻页失败提示。
-            errorMessage = nil
+            var appended = 0
+            for _ in 0..<5 {
+                guard let page = cursor else { break }
+                let result = try await pageLoader(source(page: page))
+                // 刷新期间旧页响应一律作废，不能追加、更不能覆盖 cursor。
+                guard epoch == token else { return }
+                let existing = Set(items.map(\.id))
+                let fresh = result.items.filter { !existing.contains($0.id) }
+                if !fresh.isEmpty { items += fresh }
+                cursor = advancedCursor(from: page, result: result)
+                appended += fresh.count
+                if appended > 0 || cursor == nil { break }
+            }
+            if appended == 0, cursor != nil {
+                // 明确给出可点击重试的状态，绝不留下一个永远转圈的空白哨兵。
+                errorMessage = "没有加载到新内容，点击重试"
+            }
         } catch {
+            guard epoch == token else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// 站点偶尔回传与请求相同的页号；必须强制往前推一格，否则会反复请求同一页。
+    private func advancedCursor(from page: Int, result: JDFeedResult) -> Int? {
+        guard let next = result.nextPage else { return nil }
+        guard next != page else {
+            switch channel.feedSource {
+            case .timeline: return page + 1
+            case .channel: return page > 1 ? page - 1 : nil
+            }
+        }
+        return next
     }
 
     /// 后台检查到新内容时的提示；不自动刷新，避免打断当前阅读。
@@ -104,9 +161,10 @@ final class FeedStore: ObservableObject {
     /// 只拉第一页最新一条做对比；失败静默，绝不打断阅读。
     func checkForNewContent() async {
         guard !isLoading, !isLoadingMore, !items.isEmpty else { return }
+        let token = epoch
         do {
-            let result = try await JDFeedLoader.load(source: source(page: initialPage))
-            guard let newest = result.items.first else { return }
+            let result = try await pageLoader(source(page: initialPage))
+            guard epoch == token, let newest = result.items.first else { return }
             if !items.contains(where: { $0.id == newest.id }) {
                 hasNewContent = true
             }
@@ -203,6 +261,7 @@ final class FeedStore: ObservableObject {
     // MARK: 图片流评论原地展开
 
     /// 展开 / 收起某条图片下的评论；首次展开时才请求网络。
+    /// 只往当前条下面插入一行，不滚动列表，页面位置保持不变。
     func toggleInlineComments(for item: JDFeedItem) {
         if expandedCommentID == item.id {
             expandedCommentID = nil
